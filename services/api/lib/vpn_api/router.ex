@@ -1,0 +1,119 @@
+
+defmodule VpnApi.Router do
+  use Plug.Router
+  use Plug.ErrorHandler
+  import Ecto.Query
+  alias VpnApi.{Repo}
+  alias VpnApi.Schemas.{User, Node, Credential}
+  alias VpnApi.{Vless}
+  alias VpnApi.Core.Log
+  alias VpnApi.Xray.Renderer
+
+  plug :match
+  plug Plug.Parsers, parsers: [:json], json_decoder: Jason
+  plug :dispatch
+
+  get "/health" do
+    Log.info("health_ok", "Router", %{})
+    send_json(conn, 200, %{ok: true}, "health_ok")
+  end
+
+  post "/v1/users" do
+    with {:ok, body, _} <- Plug.Conn.read_body(conn),
+         {:ok, params} <- decode(body),
+         changeset <- User.changeset(%User{}, params),
+         {:ok, user} <- Repo.insert(changeset) do
+      Log.info("user_created", "Router", %{user_id: user.id})
+      send_json(conn, 201, user, "user_created")
+    else
+      {:error, :bad_json} -> send_error(conn, 400, "API-001", "bad_json", %{})
+      {:error, err}       -> send_error(conn, 422, "DB-001", "user_create_failed", %{reason: inspect(err)})
+    end
+  end
+
+  post "/v1/issue" do
+    with {:ok, body, _} <- Plug.Conn.read_body(conn),
+         {:ok, p}      <- decode(body),
+         tg_id when is_integer(tg_id) <- Map.get(p, "tg_id"),
+         %User{} = user <- Repo.one(from u in User, where: u.tg_id == ^tg_id) || throw(:not_found_user),
+         node <- pick_node(Map.get(p, "node_id")),
+         {:ok, cred} <- ensure_credential(user.id, node.id),
+         {:ok, link} <- Vless.render(cred.uuid, %{
+           host: Map.get(p, "host", "localhost"),
+           port: Map.get(p, "port", 443),
+           public_key: Map.get(p, "public_key", ""),
+           short_id: Map.get(p, "short_id", ""),
+           server_name: Map.get(p, "server_name", ""),
+           label: Map.get(p, "label", "vpn")
+         }) do
+      Log.info("vless_issued", "Router", %{user_id: user.id, details: %{node_id: node.id}})
+      send_json(conn, 200, %{vless: link}, "vless_issued")
+    else
+      :not_found_user -> send_error(conn, 404, "API-001", "user_not_found", %{})
+      :not_found_node -> send_error(conn, 404, "API-001", "node_not_found", %{})
+      {:error, %{error_code: code} = e} -> send_error(conn, 500, code, "vless_issue_failed", e)
+      {:error, reason} -> send_error(conn, 500, "VPN-003", "vless_issue_failed", %{reason: inspect(reason)})
+      _ -> send_error(conn, 400, "API-001", "bad_request", %{})
+    end
+  end
+
+  post "/v1/nodes/:id/sync" do
+    with {:ok, body, _} <- Plug.Conn.read_body(conn),
+         json <- (case Jason.decode(body) do {:ok, m} when is_map(m) -> m; _ -> %{} end),
+         node_id <- String.to_integer(id),
+         %Node{} = node <- Repo.get(Node, node_id) || throw(:not_found_node) do
+
+      uuids = Repo.all(from c in Credential, where: c.node_id == ^node_id, select: c.uuid)
+
+      params =
+        %{
+          "dest" => node.reality_dest || "www.cloudflare.com:443",
+          "serverNames" => (node.reality_server_names || []),
+          "publicKey" => node.reality_public_key || "",
+          "shortIds" => (node.reality_short_ids || []),
+          "listen_port" => node.listen_port || 443
+        }
+        |> Map.merge(json)
+
+      case Renderer.render(params, uuids) do
+        {:ok, cfg} ->
+          case Renderer.write!(cfg, "/xray/config.json") do
+            :ok -> Log.info("xray_config_written", "Router", %{details: %{node_id: id, clients: length(uuids)}})
+                   send_json(conn, 202, %{"written" => true, "clients" => length(uuids)}, "xray_config_written")
+            {:error, e} -> send_error(conn, 500, "VPN-003", "xray_config_write_failed", %{reason: inspect(e)})
+          end
+        {:error, e} -> send_error(conn, 500, "VPN-003", "xray_config_render_failed", e)
+      end
+    else
+      :not_found_node -> send_error(conn, 404, "API-001", "node_not_found", %{})
+      {:error, :bad_json} -> send_error(conn, 400, "API-001", "bad_json", %{})
+      _ -> send_error(conn, 400, "API-001", "bad_request", %{})
+    end
+  end
+
+  post "/v1/nodes/:id/reload" do
+    case VpnApi.Xray.Renderer.reload() do
+      :ok -> send_json(conn, 200, %{reloaded: true, node_id: id}, "xray_reload_ok")
+      {:error, e} -> send_error(conn, 500, "VPN-002", "xray_reload_failed", e)
+    end
+  end
+
+  match _ do
+    send_error(conn, 404, "API-001", "route_not_found", %{})
+  end
+
+  # helpers
+  defp decode(body), do: case Jason.decode(body) do {:ok, map} when is_map(map) -> {:ok, map}; _ -> {:error, :bad_json} end
+  defp pick_node(nil), do: Repo.one(from n in Node, order_by: [asc: n.id]) || throw(:not_found_node)
+  defp pick_node(id),  do: Repo.get(Node, id) || throw(:not_found_node)
+  defp ensure_credential(user_id, node_id) do
+    case Repo.one(from c in Credential, where: c.user_id == ^user_id and c.node_id == ^node_id) do
+      %Credential{} = c -> {:ok, c}
+      nil -> %Credential{user_id: user_id, node_id: node_id, uuid: Ecto.UUID.generate()} |> Credential.changeset(%{}) |> Repo.insert()
+    end
+  rescue
+    e -> {:error, %{error_code: "DB-001", reason: inspect(e)}}
+  end
+  defp send_json(conn, status, data, event), do: (Log.info(event, "Router", %{details: data}); conn |> put_resp_content_type("application/json") |> send_resp(status, Jason.encode!(data)))
+  defp send_error(conn, status, code, event, details), do: (Log.error(code, event, "Router", %{details: details}); conn |> put_resp_content_type("application/json") |> send_resp(status, Jason.encode!(%{error: true, error_code: code, event: event, details: details})))
+end

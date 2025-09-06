@@ -1,0 +1,1 @@
+[import_deps: [:plug, :ecto_sql], inputs: ["mix.exs", "{config,lib,test}/**/*.{ex,exs}"]]

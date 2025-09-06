@@ -1,0 +1,65 @@
+
+version: "3.9"
+services:
+  api:
+    build: ./services/api
+    image: vpn/api:dev
+    environment:
+      - APP_ENV=${APP_ENV}
+      - APP_SECRET=${APP_SECRET}
+      - APP_PORT=${APP_PORT}
+      - APP_HOST=${APP_HOST}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - REDIS_URL=${REDIS_URL}
+    ports:
+      - "4000:4000"
+    depends_on:
+      - db
+      - redis
+      - xray
+    volumes:
+      - ./xray:/xray:rw
+    command: ["sh", "-c", "mix ecto.create && mix ecto.migrate && mix run --no-halt"]
+
+  bot:
+    build: ./services/bot
+    image: vpn/bot:dev
+    environment:
+      - APP_ENV=${APP_ENV}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - API_BASE=http://api:4000
+      - XRAY_CLIENT_UUID=${XRAY_CLIENT_UUID}
+    depends_on:
+      - api
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  xray:
+    image: teddysun/xray
+    container_name: xray
+    volumes:
+      - ./xray/config.json:/etc/xray/config.json:ro
+    ports:
+      - "443:443"
+    restart: unless-stopped
+
+volumes:
+  db-data:
