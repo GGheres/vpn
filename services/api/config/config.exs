@@ -1,18 +1,37 @@
 
 import Config
 
+# helpers for robust env parsing (handle nil/empty)
+env_int = fn var, default ->
+  case System.get_env(var) do
+    nil -> default
+    "" -> default
+    v -> String.to_integer(v)
+  end
+end
+
+env = fn var, default ->
+  case System.get_env(var) do
+    nil -> default
+    "" -> default
+    v -> v
+  end
+end
+
 config :logger, :console, format: "$message
 "
 
+config :vpn_api, ecto_repos: [VpnApi.Repo]
+
 config :vpn_api, VpnApi.Repo,
-  database: System.get_env("POSTGRES_DB", "vpn"),
-  username: System.get_env("POSTGRES_USER", "vpn"),
-  password: System.get_env("POSTGRES_PASSWORD", "vpn"),
-  hostname: System.get_env("POSTGRES_HOST", "db"),
-  port: String.to_integer(System.get_env("POSTGRES_PORT", "5432")),
+  database: env.("POSTGRES_DB", "vpn"),
+  username: env.("POSTGRES_USER", "vpn"),
+  password: env.("POSTGRES_PASSWORD", "vpn"),
+  hostname: env.("POSTGRES_HOST", "db"),
+  port: env_int.("POSTGRES_PORT", 5432),
   pool_size: 10
 
 config :vpn_api,
-  app_port: String.to_integer(System.get_env("APP_PORT", "4000")),
-  app_host: System.get_env("APP_HOST", "0.0.0.0"),
-  app_secret: System.get_env("APP_SECRET", "please_change_me")
+  app_port: env_int.("APP_PORT", 4000),
+  app_host: env.("APP_HOST", "0.0.0.0"),
+  app_secret: env.("APP_SECRET", "please_change_me")

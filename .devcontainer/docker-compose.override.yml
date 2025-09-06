@@ -3,7 +3,7 @@ version: "3.9"
 services:
   api:
     volumes:
-      - ..:/app:cached
+      - ./services/api:/app:cached
     environment:
       MIX_ENV: dev
     deploy:
@@ -17,7 +17,7 @@ services:
 
   bot:
     volumes:
-      - ..:/app:cached
+      - ./services/bot:/app:cached
     environment:
       MIX_ENV: dev
     deploy:

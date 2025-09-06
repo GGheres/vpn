@@ -1,6 +1,6 @@
 
 defmodule VpnBot.Handler do
-  use ExGram.Bot, setup_commands: true
+  use ExGram.Bot, name: :vpn_bot, setup_commands: true
   require Logger
 
   command("start", description: "Start bot")

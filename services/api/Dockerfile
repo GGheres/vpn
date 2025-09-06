@@ -1,10 +1,24 @@
+FROM elixir:1.16-alpine
 
-FROM hexpm/elixir:1.16.2-erlang-26.2.5-debian-bookworm-20240506
-RUN apt-get update && apt-get install -y build-essential git curl && rm -rf /var/lib/apt/lists/*
+# Базовые пакеты для сборки
+RUN apk add --no-cache build-base git curl openssl bash
+
+# Hex/Rebar
 RUN mix local.hex --force && mix local.rebar --force
+
+# Рабочая директория
 WORKDIR /app
-COPY . /app
+
+# Сначала только файлы зависимостей — кешируем deps между сборками
+COPY mix.exs mix.lock ./
 RUN mix deps.get
-RUN MIX_ENV=prod mix compile || mix compile
+
+# Затем — остальной проект
+COPY . .
+
+# Компиляция (dev-окружение)
+ENV MIX_ENV=dev
+RUN mix compile
+
 EXPOSE 4000
 CMD ["mix", "run", "--no-halt"]

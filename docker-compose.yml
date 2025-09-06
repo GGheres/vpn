@@ -5,16 +5,16 @@ services:
     build: ./services/api
     image: vpn/api:dev
     environment:
-      - APP_ENV=${APP_ENV}
-      - APP_SECRET=${APP_SECRET}
-      - APP_PORT=${APP_PORT}
-      - APP_HOST=${APP_HOST}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - POSTGRES_PORT=${POSTGRES_PORT}
-      - REDIS_URL=${REDIS_URL}
+      - APP_ENV=${APP_ENV:-dev}
+      - APP_SECRET=${APP_SECRET:-please_change_me}
+      - APP_PORT=${APP_PORT:-4000}
+      - APP_HOST=${APP_HOST:-0.0.0.0}
+      - POSTGRES_USER=${POSTGRES_USER:-vpn}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-vpn}
+      - POSTGRES_DB=${POSTGRES_DB:-vpn}
+      - POSTGRES_HOST=${POSTGRES_HOST:-db}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     ports:
       - "4000:4000"
     depends_on:
@@ -23,25 +23,26 @@ services:
       - xray
     volumes:
       - ./xray:/xray:rw
-    command: ["sh", "-c", "mix ecto.create && mix ecto.migrate && mix run --no-halt"]
+    command: ["sh", "-c", "mix deps.get && mix ecto.create && mix ecto.migrate && mix run --no-halt"]
 
   bot:
     build: ./services/bot
     image: vpn/bot:dev
+    command: ["sh", "-c", "mix deps.get && mix run --no-halt"]
     environment:
-      - APP_ENV=${APP_ENV}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - API_BASE=http://api:4000
-      - XRAY_CLIENT_UUID=${XRAY_CLIENT_UUID}
+      - APP_ENV=${APP_ENV:-dev}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-changeme}
+      - API_BASE=${API_BASE:-http://api:4000}
+      - XRAY_CLIENT_UUID=${XRAY_CLIENT_UUID:-11111111-1111-1111-1111-111111111111}
     depends_on:
       - api
 
   db:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER:-vpn}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-vpn}
+      - POSTGRES_DB=${POSTGRES_DB:-vpn}
     volumes:
       - db-data:/var/lib/postgresql/data
     ports:

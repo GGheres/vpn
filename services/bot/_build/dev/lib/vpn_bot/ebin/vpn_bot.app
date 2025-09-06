@@ -1,0 +1,9 @@
+{application,vpn_bot,
+             [{optional_applications,[]},
+              {applications,[kernel,stdlib,elixir,logger,ssl,inets,ex_gram,
+                             jason,req]},
+              {description,"vpn_bot"},
+              {modules,['Elixir.VpnBot.Application','Elixir.VpnBot.Handler']},
+              {registered,[]},
+              {vsn,"0.1.0"},
+              {mod,{'Elixir.VpnBot.Application',[]}}]}.

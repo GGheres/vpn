@@ -103,7 +103,12 @@ defmodule VpnApi.Router do
   end
 
   # helpers
-  defp decode(body), do: case Jason.decode(body) do {:ok, map} when is_map(map) -> {:ok, map}; _ -> {:error, :bad_json} end
+  defp decode(body) do
+    case Jason.decode(body) do
+      {:ok, map} when is_map(map) -> {:ok, map}
+      _ -> {:error, :bad_json}
+    end
+  end
   defp pick_node(nil), do: Repo.one(from n in Node, order_by: [asc: n.id]) || throw(:not_found_node)
   defp pick_node(id),  do: Repo.get(Node, id) || throw(:not_found_node)
   defp ensure_credential(user_id, node_id) do

@@ -39,7 +39,7 @@ defmodule VpnApi.Xray.Renderer do
   end
 
   @spec write!(map(), binary()) :: :ok | {:error, map()}
-  def write!(map, path \ "/xray/config.json") when is_map(map) and is_binary(path) do
+  def write!(map, path \\ "/xray/config.json") when is_map(map) and is_binary(path) do
     with {:ok, json} <- Jason.encode(map, pretty: true),
          :ok <- File.write(path, json) do
       :ok
