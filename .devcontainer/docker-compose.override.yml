@@ -1,16 +1,51 @@
 version: "3.9"
+
 services:
   api:
-    # Mount only the API app into /app (matches WORKDIR)
     volumes:
-      - ../services/api:/app:cached
-      - mix-cache:/root/.mix
-      - build-cache:/app/_build
-      - deps-cache:/app/deps
+      - ..:/app:cached
     environment:
-      - MIX_ENV=dev
+      MIX_ENV: dev
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4g
+        reservations:
+          cpus: "1.0"
+          memory: 2g
 
-volumes:
-  mix-cache:
-  build-cache:
-  deps-cache:
+  bot:
+    volumes:
+      - ..:/app:cached
+    environment:
+      MIX_ENV: dev
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+
+  db:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2g
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512m
+
+  xray:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512m
