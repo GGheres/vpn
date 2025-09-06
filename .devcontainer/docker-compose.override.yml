@@ -1,0 +1,16 @@
+version: "3.9"
+services:
+  api:
+    # Mount only the API app into /app (matches WORKDIR)
+    volumes:
+      - ../services/api:/app:cached
+      - mix-cache:/root/.mix
+      - build-cache:/app/_build
+      - deps-cache:/app/deps
+    environment:
+      - MIX_ENV=dev
+
+volumes:
+  mix-cache:
+  build-cache:
+  deps-cache:
