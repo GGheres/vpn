@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  caddy:
+    # Map Caddy to 80/443 on a specific host IP to avoid conflict with Xray on 443
+    # Set CADDY_BIND_IP to the secondary public IP used for API
+    ports:
+      - "${CADDY_BIND_IP:-127.0.0.1}:80:80"
+      - "${CADDY_BIND_IP:-127.0.0.1}:443:443"
+    profiles: ["prod"]
+
+  xray:
+    # Bind Xray's 443 to a different host IP (primary IP)
+    ports:
+      - "${XRAY_BIND_IP:-0.0.0.0}:443:443"
+    profiles: ["prod"]
+

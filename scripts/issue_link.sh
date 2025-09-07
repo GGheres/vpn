@@ -2,7 +2,11 @@
 set -euo pipefail
 
 # Loads .env if present, then tries to issue vless link for a TG user.
-# Usage: scripts/issue_link.sh [TG_ID]
+# Usage:
+#   scripts/issue_link.sh [TG_ID]
+# Env overrides:
+#   HOST, PORT, LABEL           # preferred simple names
+#   VLESS_HOST, XRAY_LISTEN_PORT, LABEL  # legacy/compatible
 
 if [[ -f .env ]]; then
   set -a
@@ -14,8 +18,9 @@ fi
 TG_ID="${1:-${TG_ID:-12345}}"
 API_BASE="${API_BASE:-http://localhost:4000}"
 
-VLESS_HOST="${VLESS_HOST:-localhost}"
-XRAY_LISTEN_PORT="${XRAY_LISTEN_PORT:-443}"
+# Parameterization
+HOST="${HOST:-${VLESS_HOST:-localhost}}"
+PORT="${PORT:-${XRAY_LISTEN_PORT:-443}}"
 XRAY_PUBLIC_KEY="${XRAY_PUBLIC_KEY:-}"
 XRAY_SHORT_ID="${XRAY_SHORT_ID:-}"
 XRAY_REALITY_SERVER_NAME="${XRAY_REALITY_SERVER_NAME:-}"
@@ -25,8 +30,8 @@ payload() {
   cat <<JSON
 {
   "tg_id": ${TG_ID},
-  "host": "${VLESS_HOST}",
-  "port": ${XRAY_LISTEN_PORT},
+  "host": "${HOST}",
+  "port": ${PORT},
   "public_key": "${XRAY_PUBLIC_KEY}",
   "short_id": "${XRAY_SHORT_ID}",
   "server_name": "${XRAY_REALITY_SERVER_NAME}",
@@ -50,7 +55,7 @@ PY
   fi
 }
 
-echo "Issuing config for tg_id=${TG_ID} via ${API_BASE} ..." 1>&2
+echo "Issuing config for tg_id=${TG_ID} host=${HOST} port=${PORT} label=${LABEL} via ${API_BASE} ..." 1>&2
 RESP=$(curl -s -w "\n%{http_code}" -X POST "${API_BASE}/v1/issue" \
   -H 'Content-Type: application/json' \
   -d "$(payload)")
@@ -84,4 +89,3 @@ fi
 
 echo "Failed to issue link (HTTP ${CODE}): ${BODY}" 1>&2
 exit 1
-

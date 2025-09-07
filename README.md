@@ -43,6 +43,19 @@ make issue         # create user if needed and print vless link
 make gen-keys      # generate x25519 private/public keys
 ```
 
+Parameterize `issue` with environment variables (HOST/PORT/LABEL), for example:
+
+```bash
+HOST=vpn.example.com PORT=443 LABEL=myvpn TG_ID=555 make issue
+# Legacy vars also work: VLESS_HOST=... XRAY_LISTEN_PORT=... LABEL=...
+```
+
+Key generation can auto-write into `.env`:
+
+```bash
+WRITE_ENV=1 make gen-keys     # or: scripts/generate_x25519.sh --write
+```
+
 To change node id or API base when syncing:
 
 ```bash
@@ -58,7 +71,7 @@ This repo mounts the Docker socket into the API container and includes `docker-c
 
 An example `caddy/Caddyfile` and overlay compose file are provided. They proxy `api.example.com` to `api:4000`.
 
-Run alongside the prod stack (uses 8080/8443 on host by default to avoid clashing with xray:443):
+Default overlay maps to host 8080/8443 (avoids collision with Xray:443):
 
 ```bash
 docker compose -f docker-compose.prod.yml -f docker-compose.caddy.yml up -d --build caddy
@@ -66,3 +79,39 @@ docker compose -f docker-compose.prod.yml -f docker-compose.caddy.yml up -d --bu
 ```
 
 Adjust the site block in `caddy/Caddyfile` to your domain.
+
+### Caddy on :443 with separate IPs
+
+If your host has two public IPs, bind Xray to one and Caddy to the other:
+
+```bash
+# Set IPs in environment or .env
+export XRAY_BIND_IP=203.0.113.10     # IP for Xray (REALITY)
+export CADDY_BIND_IP=203.0.113.20    # IP for API (HTTPS)
+
+docker compose \
+  -f docker-compose.prod.yml \
+  -f docker-compose.caddy.yml \
+  -f docker-compose.caddy443.yml \
+  --profile prod up -d --build caddy xray
+```
+
+This overlay remaps ports so both services can use 443 on different host IPs.
+
+### Single IP :443 with SNI split (HAProxy)
+
+When only one public IP is available, use HAProxy to split TLS by SNI:
+
+```bash
+# Edit haproxy/haproxy.cfg and set your API domain (default: api.example.com)
+
+docker compose \
+  -f docker-compose.prod.yml \
+  -f docker-compose.caddy.yml \
+  -f docker-compose.haproxy.yml \
+  --profile prod up -d --build haproxy caddy xray
+```
+
+In this setup HAProxy listens on 443/80 and forwards TLS by SNI: requests for
+`api.example.com` go to Caddy (API), everything else to Xray. Caddy still
+obtains certificates (TLS-ALPN-01 or HTTP-01 via port 80 passthrough).

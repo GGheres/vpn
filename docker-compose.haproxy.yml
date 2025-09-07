@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  haproxy:
+    image: haproxy:lts
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - xray
+      - caddy
+    profiles: ["prod"]
+
+  # When HAProxy fronts 443/80, disable host port bindings of xray & caddy
+  xray:
+    ports: []
+    profiles: ["prod"]
+
+  caddy:
+    ports: []
+    profiles: ["prod"]
+
