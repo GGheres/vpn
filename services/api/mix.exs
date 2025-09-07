@@ -1,7 +1,12 @@
 
 defmodule VpnApi.MixProject do
+  @moduledoc """
+  Mix project for the API application.
+  Contains project metadata, runtime application spec, and dependencies.
+  """
   use Mix.Project
 
+  @doc "Project metadata (name, version, toolchain, deps)."
   def project do
     [
       app: :vpn_api,
@@ -12,6 +17,7 @@ defmodule VpnApi.MixProject do
     ]
   end
 
+  @doc "Application specification: extra apps and application module."
   def application do
     [
       extra_applications: [:logger, :crypto, :inets, :ssl, :eex],
@@ -19,6 +25,7 @@ defmodule VpnApi.MixProject do
     ]
   end
 
+  # Runtime dependencies for the API.
   defp deps do
     [
       {:plug, "~> 1.15"},
@@ -28,7 +35,8 @@ defmodule VpnApi.MixProject do
       {:postgrex, ">= 0.0.0"},
       {:redix, ">= 1.0.0"},
       {:uuid, "~> 1.1"},
-      {:telemetry, "~> 1.2"}
+      {:telemetry, "~> 1.2"},
+      {:ex_doc, "~> 0.32", only: :dev, runtime: false}
     ]
   end
 end

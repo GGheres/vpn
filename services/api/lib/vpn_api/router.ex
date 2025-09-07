@@ -1,5 +1,19 @@
 
 defmodule VpnApi.Router do
+  @moduledoc """
+  Minimal REST API for managing users, nodes, credentials and issuing VLESS links.
+
+  Endpoints (JSON):
+  - `GET /health` — health probe.
+  - `POST /v1/users` — create user by Telegram id.
+  - `POST /v1/issue` — issue VLESS link for a user on a node.
+  - `POST /v1/nodes/:id/sync` — render and write Xray config for a node.
+  - `POST /v1/nodes/:id/reload` — hot‑reload Xray via docker signal.
+  - Nodes CRUD: `GET /v1/nodes`, `POST /v1/nodes`, `GET/patch/delete /v1/nodes/:id`.
+
+  Responses are JSON; errors share the shape
+  `%{error: true, error_code: String.t(), event: String.t(), details: map()}`.
+  """
   use Plug.Router
   use Plug.ErrorHandler
   import Ecto.Query
@@ -13,11 +27,13 @@ defmodule VpnApi.Router do
   plug Plug.Parsers, parsers: [:json], json_decoder: Jason
   plug :dispatch
 
+  # GET /health — simple readiness probe
   get "/health" do
     Log.info("health_ok", "Router", %{})
     send_json(conn, 200, %{ok: true}, "health_ok")
   end
 
+  # POST /v1/users — create a user from JSON body: %{tg_id: integer, status?: string}
   post "/v1/users" do
     with {:ok, body, _} <- Plug.Conn.read_body(conn),
          {:ok, params} <- decode(body),
@@ -31,6 +47,8 @@ defmodule VpnApi.Router do
     end
   end
 
+  # POST /v1/issue — issue a VLESS link for a TG user on a node
+  # Body accepts keys: tg_id, host, port, public_key, short_id, server_name, label, node_id?
   post "/v1/issue" do
     with {:ok, body, _} <- Plug.Conn.read_body(conn),
          {:ok, p}      <- decode(body),
@@ -57,6 +75,7 @@ defmodule VpnApi.Router do
     end
   end
 
+  # POST /v1/nodes/:id/sync — render and write Xray config for node
   post "/v1/nodes/:id/sync" do
     with {:ok, body, _} <- Plug.Conn.read_body(conn),
          json <- (case Jason.decode(body) do {:ok, m} when is_map(m) -> m; _ -> %{} end),
@@ -92,6 +111,7 @@ defmodule VpnApi.Router do
     end
   end
 
+  # POST /v1/nodes/:id/reload — signal dockerized xray for hot reload
   post "/v1/nodes/:id/reload" do
     case VpnApi.Xray.Renderer.reload() do
       :ok -> send_json(conn, 200, %{reloaded: true, node_id: id}, "xray_reload_ok")
@@ -100,11 +120,13 @@ defmodule VpnApi.Router do
   end
 
   # NODES CRUD
+  # GET /v1/nodes — list nodes
   get "/v1/nodes" do
     nodes = Repo.all(from n in Node, order_by: [asc: n.id])
     send_json(conn, 200, nodes, "nodes_list")
   end
 
+  # POST /v1/nodes — create node
   post "/v1/nodes" do
     with {:ok, body, _} <- Plug.Conn.read_body(conn),
          {:ok, params} <- decode(body),
@@ -117,6 +139,7 @@ defmodule VpnApi.Router do
     end
   end
 
+  # GET /v1/nodes/:id — fetch node
   get "/v1/nodes/:id" do
     case Repo.get(Node, String.to_integer(id)) do
       %Node{} = node -> send_json(conn, 200, node, "node_fetched")
@@ -124,6 +147,7 @@ defmodule VpnApi.Router do
     end
   end
 
+  # PATCH /v1/nodes/:id — update node
   patch "/v1/nodes/:id" do
     with {:ok, body, _} <- Plug.Conn.read_body(conn),
          {:ok, params} <- decode(body),
@@ -138,6 +162,7 @@ defmodule VpnApi.Router do
     end
   end
 
+  # DELETE /v1/nodes/:id — remove node
   delete "/v1/nodes/:id" do
     case Repo.get(Node, String.to_integer(id)) do
       %Node{} = node ->
@@ -154,14 +179,22 @@ defmodule VpnApi.Router do
   end
 
   # helpers
+  # Decodes a JSON body into a map.
+  # Returns `{:ok, map}` or `{:error, :bad_json}`.
   defp decode(body) do
     case Jason.decode(body) do
       {:ok, map} when is_map(map) -> {:ok, map}
       _ -> {:error, :bad_json}
     end
   end
+
+  # Picks a node by id or the first available one.
+  # Raises (via `throw(:not_found_node)`) if none found.
   defp pick_node(nil), do: Repo.one(from n in Node, order_by: [asc: n.id]) || throw(:not_found_node)
   defp pick_node(id),  do: Repo.get(Node, id) || throw(:not_found_node)
+
+  # Ensures there is a credential for `{user_id, node_id}`.
+  # Returns `{:ok, %Credential{}}` or `{:error, %{error_code: String.t(), reason: term()}}`.
   defp ensure_credential(user_id, node_id) do
     case Repo.one(from c in Credential, where: c.user_id == ^user_id and c.node_id == ^node_id) do
       %Credential{} = c -> {:ok, c}
@@ -170,6 +203,10 @@ defmodule VpnApi.Router do
   rescue
     e -> {:error, %{error_code: "DB-001", reason: inspect(e)}}
   end
+
+  # Sends a JSON response and logs the event as info.
   defp send_json(conn, status, data, event), do: (Log.info(event, "Router", %{details: data}); conn |> put_resp_content_type("application/json") |> send_resp(status, Jason.encode!(data)))
+
+  # Sends a standardized JSON error response and logs the event as error.
   defp send_error(conn, status, code, event, details), do: (Log.error(code, event, "Router", %{details: details}); conn |> put_resp_content_type("application/json") |> send_resp(status, Jason.encode!(%{error: true, error_code: code, event: event, details: details})))
 end

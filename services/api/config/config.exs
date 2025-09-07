@@ -1,4 +1,5 @@
-
+# API config (compile-time defaults). Reads DB and app settings from ENV with
+# graceful fallbacks, and configures console JSON logging.
 import Config
 
 # helpers for robust env parsing (handle nil/empty)
@@ -18,8 +19,7 @@ env = fn var, default ->
   end
 end
 
-config :logger, :console, format: "$message
-"
+config :logger, :console, format: "$message\n"
 
 config :vpn_api, ecto_repos: [VpnApi.Repo]
 

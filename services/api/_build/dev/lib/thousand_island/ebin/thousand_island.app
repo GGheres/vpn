@@ -1,8 +1,5 @@
 {application,thousand_island,
-             [{optional_applications,[]},
-              {applications,[kernel,stdlib,elixir,logger,ssl,telemetry]},
-              {description,"A simple & modern pure Elixir socket server"},
-              {modules,['Elixir.ThousandIsland',
+             [{modules,['Elixir.ThousandIsland',
                         'Elixir.ThousandIsland.Acceptor',
                         'Elixir.ThousandIsland.AcceptorPoolSupervisor',
                         'Elixir.ThousandIsland.AcceptorSupervisor',
@@ -18,5 +15,8 @@
                         'Elixir.ThousandIsland.Transport',
                         'Elixir.ThousandIsland.Transports.SSL',
                         'Elixir.ThousandIsland.Transports.TCP']},
+              {optional_applications,[]},
+              {applications,[kernel,stdlib,elixir,logger,ssl,telemetry]},
+              {description,"A simple & modern pure Elixir socket server"},
               {registered,[]},
               {vsn,"1.4.1"}]}.

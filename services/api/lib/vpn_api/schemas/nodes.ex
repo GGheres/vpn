@@ -1,5 +1,11 @@
 
 defmodule VpnApi.Schemas.Node do
+  @moduledoc """
+  Node model representing a VPN server instance.
+
+  Captures network location, REALITY parameters and housekeeping fields used
+  to render and synchronize Xray configuration.
+  """
   use Ecto.Schema
   import Ecto.Changeset
   @derive {Jason.Encoder, only: [:id, :region, :ip, :status, :version, :last_sync_at, :listen_port, :reality_dest, :reality_public_key, :reality_server_names, :reality_short_ids, :inserted_at, :updated_at]}
@@ -18,6 +24,9 @@ defmodule VpnApi.Schemas.Node do
     has_many :credentials, VpnApi.Schemas.Credential
     timestamps()
   end
+  @doc """
+  Validates creation/update params for a node, including listen port bounds.
+  """
   def changeset(struct, attrs) do
     struct
     |> cast(attrs, [

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Purpose: Sync Xray node config with the API by posting REALITY params.
 set -euo pipefail
 
 # Load .env if present
@@ -35,4 +36,3 @@ curl -fsS -X POST "${API_BASE}/v1/nodes/${NODE_ID}/sync" \
   -H 'Content-Type: application/json' \
   -d "${JSON}"
 echo
-

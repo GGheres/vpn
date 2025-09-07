@@ -1,6 +1,25 @@
 
 defmodule VpnApi.Vless do
-  @moduledoc "Builds vless:// links for REALITY + Vision."
+  @moduledoc """
+  Helper to construct `vless://` links compatible with REALITY + Vision.
+
+  Encodes optional parameters for Reality transport such as `public_key`,
+  `short_id`, `server_name`, and a human label appended after `#`.
+  """
+
+  @doc """
+  Build a VLESS link from a credential UUID and options.
+
+  Options:
+  - `:host` (default: "localhost")
+  - `:port` (default: 443)
+  - `:public_key` (Reality public key)
+  - `:short_id` (Reality short id)
+  - `:server_name` (SNI)
+  - `:label` (label after '#', URL‑encoded)
+
+  Returns `{:ok, binary}` or `{:error, %{error_code: "VPN-003", reason: term}}`.
+  """
   def render("", _opts), do: {:error, %{error_code: "VPN-003", reason: :invalid_uuid}}
   def render(uuid, opts) do
     host = Map.get(opts, :host, "localhost")

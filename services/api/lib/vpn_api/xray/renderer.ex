@@ -1,8 +1,24 @@
 
 defmodule VpnApi.Xray.Renderer do
-  @moduledoc "Renders /xray/config.json and hot-reloads Xray."
+  @moduledoc """
+  Builds an Xray REALITY VLESS configuration and manages hot reloads.
+
+  Responsibilities:
+  - `render/2` — create in‑memory Xray JSON config from params and client UUIDs.
+  - `write!/2` — write JSON config to a file (defaults to `/xray/config.json`).
+  - `reload/0` — send `USR1` to the `xray` docker container to hot‑reload.
+
+  Expected params keys for `render/2` (with defaults):
+  - `"listen_port"` (443), `"dest"` ("www.cloudflare.com:443"),
+    `"serverNames"`, `"privateKey"`, `"publicKey"`, `"shortIds"`.
+  """
   alias VpnApi.Core.{Log, Retry}
 
+  @doc """
+  Render an Xray REALITY VLESS config for given params and client UUIDs.
+
+  Returns `{:ok, map}` with the config or `{:error, %{error_code: String.t(), reason: term}}`.
+  """
   @spec render(map(), [binary()]) :: {:ok, map()} | {:error, map()}
   def render(params, uuids) when is_map(params) and is_list(uuids) do
     try do
@@ -39,6 +55,11 @@ defmodule VpnApi.Xray.Renderer do
     end
   end
 
+  @doc """
+  Encode the config to JSON and write it to `path`.
+
+  Returns `:ok` or `{:error, %{error_code: "VPN-003", reason: term}}`.
+  """
   @spec write!(map(), binary()) :: :ok | {:error, map()}
   def write!(map, path \\ "/xray/config.json") when is_map(map) and is_binary(path) do
     with {:ok, json} <- Jason.encode(map, pretty: true),
@@ -49,6 +70,11 @@ defmodule VpnApi.Xray.Renderer do
     end
   end
 
+  @doc """
+  Hot‑reload Xray by signaling the `xray` docker container with `USR1`.
+
+  Retries with backoff up to 3 times; returns `:ok` on success.
+  """
   @spec reload() :: :ok | {:error, map()}
   def reload do
     Retry.with_backoff(fn ->

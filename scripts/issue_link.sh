@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Purpose: Request a VLESS link for a Telegram user via the API.
 set -euo pipefail
 
 # Loads .env if present, then tries to issue vless link for a TG user.

@@ -1,3 +1,4 @@
+## Runtime config for API (evaluated at boot). Pulls DB/app settings from ENV.
 import Config
 
 # helpers for robust env parsing (handle nil/empty)
@@ -33,4 +34,3 @@ config :vpn_api,
   app_port: env_int.("APP_PORT", 4000),
   app_host: env.("APP_HOST", "0.0.0.0"),
   app_secret: env.("APP_SECRET", "please_change_me")
-

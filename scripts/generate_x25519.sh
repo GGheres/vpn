@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Purpose: Generate an X25519 keypair using the teddysun/xray container.
 set -euo pipefail
 
 echo "Generating x25519 keypair using teddysun/xray image..." 1>&2
