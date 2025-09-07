@@ -25,6 +25,10 @@ defmodule VpnApi.Schemas.User do
   Requires positive `:tg_id`; limits `:status` length.
   """
   def changeset(struct, attrs) do
-    struct |> cast(attrs, [:tg_id, :status]) |> validate_number(:tg_id, greater_than: 0) |> validate_length(:status, max: 32)
+    struct
+    |> cast(attrs, [:tg_id, :status])
+    |> validate_number(:tg_id, greater_than: 0)
+    |> validate_length(:status, max: 32)
+    |> unique_constraint(:tg_id, name: :users_tg_id_unique)
   end
 end

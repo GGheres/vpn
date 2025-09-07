@@ -8,7 +8,7 @@
         "clients": [
           {
             "flow": "xtls-rprx-vision",
-            "id": "57c7723e-cc4e-45f4-8b73-8e0f811501e1"
+            "id": "4b005809-6e18-48f8-9db7-23c13584ce67"
           }
         ],
         "decryption": "none"
@@ -17,8 +17,8 @@
         "network": "tcp",
         "realitySettings": {
           "dest": "www.cloudflare.com:443",
-          "privateKey": "eBLHHHldOo9Oh_YdmFYORT7QVKQgsUL2cEFQjDJ2TG8",
-          "publicKey": "52D_6gNsLJxgG1i8MFBQ6Fh1ixd1f4aGKEMgLiJ3tzA",
+          "privateKey": "gH5NlnfC9xByCiLjh7Z6AhTnx7qa713D88q5xLlS52w",
+          "publicKey": "4Geb20M43QT8A1PigvpXCNy5V1sl6GeZ3U6Dx6dR_jI",
           "serverNames": [
             "www.cloudflare.com"
           ],

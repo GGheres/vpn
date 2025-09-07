@@ -47,7 +47,7 @@ defmodule VpnApi.Router do
   post "/v1/issue" do
     p = conn.body_params
     with tg_id when is_integer(tg_id) <- Map.get(p, "tg_id"),
-         %User{} = user <- Repo.one(from u in User, where: u.tg_id == ^tg_id) || throw(:not_found_user),
+         %User{} = user <- Repo.one(from u in User, where: u.tg_id == ^tg_id, order_by: [asc: u.id], limit: 1) || throw(:not_found_user),
          node <- pick_node(Map.get(p, "node_id")),
          {:ok, cred} <- ensure_credential(user.id, node.id),
          {:ok, link} <- Vless.render(cred.uuid, %{
@@ -167,7 +167,7 @@ defmodule VpnApi.Router do
 
   # Picks a node by id or the first available one.
   # Raises (via `throw(:not_found_node)`) if none found.
-  defp pick_node(nil), do: Repo.one(from n in Node, order_by: [asc: n.id]) || throw(:not_found_node)
+  defp pick_node(nil), do: Repo.one(from n in Node, order_by: [asc: n.id], limit: 1) || throw(:not_found_node)
   defp pick_node(id),  do: Repo.get(Node, id) || throw(:not_found_node)
 
   # Ensures there is a credential for `{user_id, node_id}`.
