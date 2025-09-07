@@ -7,11 +7,27 @@ OUT=$(docker run --rm teddysun/xray xray x25519)
 echo "" 1>&2
 echo "${OUT}" 1>&2
 
-PRIV=$(printf "%s" "${OUT}" | awk '/Private key:/ {print $3}')
-PUB=$(printf "%s" "${OUT}" | awk '/Public key:/ {print $3}')
+# Robust parse supporting both old/new xray outputs:
+# - Old:  "Private key: <priv>" and "Public key: <pub>"
+# - New:  "PrivateKey: <priv>" (no public key shown)
+PRIV=$(printf "%s" "${OUT}" | sed -nE 's/^Private[[:space:]]*[Kk]ey:[[:space:]]*(.+)$/\1/p' | head -n1)
+PUB=$(printf "%s" "${OUT}" | sed -nE 's/^Public[[:space:]]*[Kk]ey:[[:space:]]*(.+)$/\1/p' | head -n1)
 
-if [[ -z "${PRIV}" || -z "${PUB}" ]]; then
-  echo "Could not parse keys. Raw output above." 1>&2
+if [[ -z "${PRIV}" ]]; then
+  echo "Could not parse private key. Raw output above." 1>&2
+  exit 1
+fi
+
+# If public key is not printed by current xray, derive it using a stable version
+if [[ -z "${PUB}" ]]; then
+  echo "Public key not present in output; deriving via xray:1.8.9 ..." 1>&2
+  OUT2=$(docker run --rm teddysun/xray:1.8.9 sh -lc "xray x25519 -i ${PRIV}") || true
+  echo "${OUT2}" 1>&2
+  PUB=$(printf "%s" "${OUT2}" | sed -nE 's/^Public[[:space:]]*[Kk]ey:[[:space:]]*(.+)$/\1/p' | head -n1)
+fi
+
+if [[ -z "${PUB}" ]]; then
+  echo "Could not derive public key. See output above." 1>&2
   exit 1
 fi
 

@@ -1,41 +1,41 @@
 {
-  "log": {
-    "loglevel": "warning"
-  },
   "inbounds": [
     {
-      "tag": "vless-in",
       "listen": "0.0.0.0",
       "port": 443,
       "protocol": "vless",
       "settings": {
         "clients": [
           {
-            "id": "11111111-1111-1111-1111-111111111111",
-            "flow": "xtls-rprx-vision"
+            "flow": "xtls-rprx-vision",
+            "id": "57c7723e-cc4e-45f4-8b73-8e0f811501e1"
           }
         ],
         "decryption": "none"
       },
       "streamSettings": {
         "network": "tcp",
-        "security": "reality",
         "realitySettings": {
-          "show": false,
           "dest": "www.cloudflare.com:443",
-          "xver": 0,
+          "privateKey": "eBLHHHldOo9Oh_YdmFYORT7QVKQgsUL2cEFQjDJ2TG8",
+          "publicKey": "52D_6gNsLJxgG1i8MFBQ6Fh1ixd1f4aGKEMgLiJ3tzA",
           "serverNames": [
             "www.cloudflare.com"
           ],
-          "privateKey": "GENERATE_ON_SERVER",
-          "publicKey": "FILL_PUBLIC_KEY",
           "shortIds": [
             "0123456789abcdef"
-          ]
-        }
-      }
+          ],
+          "show": false,
+          "xver": 0
+        },
+        "security": "reality"
+      },
+      "tag": "vless-in"
     }
   ],
+  "log": {
+    "loglevel": "warning"
+  },
   "outbounds": [
     {
       "protocol": "freedom",

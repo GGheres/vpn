@@ -35,24 +35,18 @@ defmodule VpnApi.Router do
 
   # POST /v1/users — create a user from JSON body: %{tg_id: integer, status?: string}
   post "/v1/users" do
-    with {:ok, body, _} <- Plug.Conn.read_body(conn),
-         {:ok, params} <- decode(body),
-         changeset <- User.changeset(%User{}, params),
-         {:ok, user} <- Repo.insert(changeset) do
-      Log.info("user_created", "Router", %{user_id: user.id})
-      send_json(conn, 201, user, "user_created")
-    else
-      {:error, :bad_json} -> send_error(conn, 400, "API-001", "bad_json", %{})
-      {:error, err}       -> send_error(conn, 422, "DB-001", "user_create_failed", %{reason: inspect(err)})
+    params = conn.body_params
+    case User.changeset(%User{}, params) |> Repo.insert() do
+      {:ok, user} -> (Log.info("user_created", "Router", %{user_id: user.id}); send_json(conn, 201, user, "user_created"))
+      {:error, err} -> send_error(conn, 422, "DB-001", "user_create_failed", %{reason: inspect(err)})
     end
   end
 
   # POST /v1/issue — issue a VLESS link for a TG user on a node
   # Body accepts keys: tg_id, host, port, public_key, short_id, server_name, label, node_id?
   post "/v1/issue" do
-    with {:ok, body, _} <- Plug.Conn.read_body(conn),
-         {:ok, p}      <- decode(body),
-         tg_id when is_integer(tg_id) <- Map.get(p, "tg_id"),
+    p = conn.body_params
+    with tg_id when is_integer(tg_id) <- Map.get(p, "tg_id"),
          %User{} = user <- Repo.one(from u in User, where: u.tg_id == ^tg_id) || throw(:not_found_user),
          node <- pick_node(Map.get(p, "node_id")),
          {:ok, cred} <- ensure_credential(user.id, node.id),
@@ -77,9 +71,8 @@ defmodule VpnApi.Router do
 
   # POST /v1/nodes/:id/sync — render and write Xray config for node
   post "/v1/nodes/:id/sync" do
-    with {:ok, body, _} <- Plug.Conn.read_body(conn),
-         json <- (case Jason.decode(body) do {:ok, m} when is_map(m) -> m; _ -> %{} end),
-         node_id <- String.to_integer(id),
+    json = case conn.body_params do m when is_map(m) -> m; _ -> %{} end
+    with node_id <- String.to_integer(id),
          %Node{} = node <- Repo.get(Node, node_id) || throw(:not_found_node) do
 
       uuids = Repo.all(from c in Credential, where: c.node_id == ^node_id, select: c.uuid)
@@ -106,7 +99,6 @@ defmodule VpnApi.Router do
       end
     else
       :not_found_node -> send_error(conn, 404, "API-001", "node_not_found", %{})
-      {:error, :bad_json} -> send_error(conn, 400, "API-001", "bad_json", %{})
       _ -> send_error(conn, 400, "API-001", "bad_request", %{})
     end
   end
@@ -128,14 +120,10 @@ defmodule VpnApi.Router do
 
   # POST /v1/nodes — create node
   post "/v1/nodes" do
-    with {:ok, body, _} <- Plug.Conn.read_body(conn),
-         {:ok, params} <- decode(body),
-         changeset <- Node.changeset(%Node{}, params),
-         {:ok, node} <- Repo.insert(changeset) do
-      send_json(conn, 201, node, "node_created")
-    else
-      {:error, :bad_json} -> send_error(conn, 400, "API-001", "bad_json", %{})
-      {:error, err}       -> send_error(conn, 422, "DB-001", "node_create_failed", %{reason: inspect(err)})
+    params = conn.body_params
+    case Node.changeset(%Node{}, params) |> Repo.insert() do
+      {:ok, node} -> send_json(conn, 201, node, "node_created")
+      {:error, err} -> send_error(conn, 422, "DB-001", "node_create_failed", %{reason: inspect(err)})
     end
   end
 
@@ -149,15 +137,12 @@ defmodule VpnApi.Router do
 
   # PATCH /v1/nodes/:id — update node
   patch "/v1/nodes/:id" do
-    with {:ok, body, _} <- Plug.Conn.read_body(conn),
-         {:ok, params} <- decode(body),
-         %Node{} = node <- Repo.get(Node, String.to_integer(id)) || throw(:not_found),
-         changeset <- Node.changeset(node, params),
+    with %Node{} = node <- Repo.get(Node, String.to_integer(id)) || throw(:not_found),
+         changeset <- Node.changeset(node, conn.body_params),
          {:ok, node2} <- Repo.update(changeset) do
       send_json(conn, 200, node2, "node_updated")
     else
       :not_found -> send_error(conn, 404, "API-001", "node_not_found", %{})
-      {:error, :bad_json} -> send_error(conn, 400, "API-001", "bad_json", %{})
       {:error, err} -> send_error(conn, 422, "DB-001", "node_update_failed", %{reason: inspect(err)})
     end
   end
@@ -179,14 +164,6 @@ defmodule VpnApi.Router do
   end
 
   # helpers
-  # Decodes a JSON body into a map.
-  # Returns `{:ok, map}` or `{:error, :bad_json}`.
-  defp decode(body) do
-    case Jason.decode(body) do
-      {:ok, map} when is_map(map) -> {:ok, map}
-      _ -> {:error, :bad_json}
-    end
-  end
 
   # Picks a node by id or the first available one.
   # Raises (via `throw(:not_found_node)`) if none found.
