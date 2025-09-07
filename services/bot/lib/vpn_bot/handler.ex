@@ -15,12 +15,13 @@ defmodule VpnBot.Handler do
   command("renew", description: "Renew subscription")
 
   # Обработка команды /start — отправляет приветствие и список команд
-  def handle({:command, :start, _}, cnt) do
-    ExGram.send_message(cnt.chat.id, "Добро пожаловать! Команды: /config, /renew")
+  def handle({:command, :start, msg}, _cnt) do
+    Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_start_cmd", module: "VpnBot.Handler", user_id: msg.from.id}))
+    ExGram.send_message(msg.chat.id, "Добро пожаловать! Команды: /config, /renew")
   end
 
   # Обработка команды /config — запрашивает ссылку у API и отправляет её пользователю
-  def handle({:command, :config, _}, cnt) do
+  def handle({:command, :config, msg}, _cnt) do
     api_base = System.get_env("API_BASE", "http://api:4000")
     host = System.get_env("VLESS_HOST", "localhost")
     port = System.get_env("XRAY_LISTEN_PORT", "443") |> to_int(443)
@@ -29,7 +30,7 @@ defmodule VpnBot.Handler do
     server_name = System.get_env("XRAY_REALITY_SERVER_NAME", "")
 
     payload = %{
-      tg_id: cnt.from.id,
+      tg_id: msg.from.id,
       host: host,
       port: port,
       public_key: public_key,
@@ -39,22 +40,22 @@ defmodule VpnBot.Handler do
     }
 
     with {:ok, link} <- issue_link(api_base, payload) do
-      ExGram.send_message(cnt.chat.id, "Твой конфиг:\n" <> link)
-      Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: cnt.from.id}))
+      ExGram.send_message(msg.chat.id, "Твой конфиг:\n" <> link)
+      Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: msg.from.id}))
     else
       {:error, :user_not_found} ->
         # Авто-создание пользователя и повторная попытка
-        _ = Req.post(api_base <> "/v1/users", json: %{tg_id: cnt.from.id, status: "active"})
+        _ = Req.post(api_base <> "/v1/users", json: %{tg_id: msg.from.id, status: "active"})
         case issue_link(api_base, payload) do
           {:ok, link} ->
-            ExGram.send_message(cnt.chat.id, "Твой конфиг:\n" <> link)
-            Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: cnt.from.id}))
+            ExGram.send_message(msg.chat.id, "Твой конфиг:\n" <> link)
+            Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: msg.from.id}))
           {:error, reason} ->
-            ExGram.send_message(cnt.chat.id, "Ошибка выдачи конфига: #{inspect(reason)}")
+            ExGram.send_message(msg.chat.id, "Ошибка выдачи конфига: #{inspect(reason)}")
           _ -> :ok
         end
       {:error, reason} ->
-        ExGram.send_message(cnt.chat.id, "Ошибка выдачи конфига: #{inspect(reason)}")
+        ExGram.send_message(msg.chat.id, "Ошибка выдачи конфига: #{inspect(reason)}")
     end
   end
 
@@ -65,7 +66,11 @@ defmodule VpnBot.Handler do
   end
 
   # Игнор остальных событий/сообщений
-  def handle(_, _), do: :ignore
+  def handle(other, cnt) do
+    # Логируем непросмотренные апдейты для отладки
+    Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_unmatched_update", module: "VpnBot.Handler", details: %{update: inspect(other)}}))
+    :ignore
+  end
 
   # Делает REST‑запрос к API `/v1/issue` и возвращает ссылку VLESS.
   # Возвращает `{:ok, link}` или `{:error, reason}`.
@@ -88,4 +93,3 @@ defmodule VpnBot.Handler do
     end
   end
 end
-

@@ -12,6 +12,7 @@ RUN mix deps.get
 # Копируем исходники и компилим (dev)
 COPY . .
 ENV MIX_ENV=dev
+RUN mix deps.get
 RUN mix compile
 
 CMD ["mix", "run", "--no-halt"]

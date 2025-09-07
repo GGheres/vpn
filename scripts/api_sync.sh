@@ -2,16 +2,32 @@
 # Purpose: Sync Xray node config with the API by posting REALITY params.
 set -euo pipefail
 
-# Load .env if present
+# Load .env if present, but do NOT override already-set env vars
+# Remember if API_BASE was preset by the caller (to not override it later)
+_PRESET_API_BASE="${API_BASE:-}"
 if [[ -f .env ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source ./.env
-  set +a
+  while IFS= read -r line; do
+    # skip comments/empty
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    # only KEY=VALUE pairs
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      val="${BASH_REMATCH[2]}"
+      # export only if unset or empty
+      if [[ -z "${!key+x}" || -z "${!key}" ]]; then
+        export "$key=$val"
+      fi
+    fi
+  done < ./.env
 fi
 
 NODE_ID="${NODE_ID:-${1:-1}}"
 API_BASE="${API_BASE:-http://localhost:4000}"
+
+# Convenience: force localhost base when USE_LOCALHOST=1 (unless caller already set API_BASE)
+if [[ "${USE_LOCALHOST:-}" == "1" && -z "${_PRESET_API_BASE}" ]]; then
+  API_BASE="http://localhost:4000"
+fi
 
 XRAY_PRIVATE_KEY="${XRAY_PRIVATE_KEY:-}"
 XRAY_PUBLIC_KEY="${XRAY_PUBLIC_KEY:-}"

@@ -13,6 +13,11 @@ defmodule VpnBot.MixProject do
   def application, do: [extra_applications: [:logger, :ssl, :inets], mod: {VpnBot.Application, []}]
 
   # Runtime dependencies for the bot.
-  defp deps, do: [{:ex_gram, "~> 0.47"}, {:jason, "~> 1.4"}, {:req, "~> 0.5"}]
+  defp deps, do: [
+    {:ex_gram, "~> 0.56"},
+    {:tesla, "~> 1.7"},
+    {:jason, "~> 1.4"},
+    {:req, "~> 0.5"}
+  ]
   |> Kernel.++([{:ex_doc, "~> 0.32", only: :dev, runtime: false}])
 end

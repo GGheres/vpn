@@ -9,15 +9,29 @@ set -euo pipefail
 #   HOST, PORT, LABEL           # preferred simple names
 #   VLESS_HOST, XRAY_LISTEN_PORT, LABEL  # legacy/compatible
 
+# Load .env if present, but do NOT override already-set env vars
+# Remember if API_BASE was preset by the caller
+_PRESET_API_BASE="${API_BASE:-}"
 if [[ -f .env ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source ./.env
-  set +a
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      val="${BASH_REMATCH[2]}"
+      if [[ -z "${!key+x}" || -z "${!key}" ]]; then
+        export "$key=$val"
+      fi
+    fi
+  done < ./.env
 fi
 
 TG_ID="${1:-${TG_ID:-12345}}"
 API_BASE="${API_BASE:-http://localhost:4000}"
+
+# Convenience: force localhost base when USE_LOCALHOST=1 (unless caller already set API_BASE)
+if [[ "${USE_LOCALHOST:-}" == "1" && -z "${_PRESET_API_BASE}" ]]; then
+  API_BASE="http://localhost:4000"
+fi
 
 # Parameterization
 HOST="${HOST:-${VLESS_HOST:-localhost}}"
