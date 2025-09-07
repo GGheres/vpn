@@ -1,0 +1,24 @@
+FROM elixir:1.16-alpine AS builder
+
+RUN apk add --no-cache build-base git curl openssl bash
+WORKDIR /app
+
+RUN mix local.hex --force && mix local.rebar --force
+
+ENV MIX_ENV=prod
+COPY mix.exs mix.lock ./
+RUN mix deps.get --only prod
+
+COPY . .
+RUN mix compile
+RUN mix release
+
+FROM elixir:1.16-alpine AS runtime
+RUN apk add --no-cache bash openssl ncurses-libs
+WORKDIR /app
+
+COPY --from=builder /app/_build/prod/rel/vpn_bot ./
+
+ENV HOME=/app
+CMD ["/app/bin/vpn_bot", "start"]
+

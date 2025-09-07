@@ -69,6 +69,7 @@ defmodule VpnApi.Router do
         %{
           "dest" => node.reality_dest || "www.cloudflare.com:443",
           "serverNames" => (node.reality_server_names || []),
+          "privateKey" => node.reality_private_key || "",
           "publicKey" => node.reality_public_key || "",
           "shortIds" => (node.reality_short_ids || []),
           "listen_port" => node.listen_port || 443
@@ -95,6 +96,56 @@ defmodule VpnApi.Router do
     case VpnApi.Xray.Renderer.reload() do
       :ok -> send_json(conn, 200, %{reloaded: true, node_id: id}, "xray_reload_ok")
       {:error, e} -> send_error(conn, 500, "VPN-002", "xray_reload_failed", e)
+    end
+  end
+
+  # NODES CRUD
+  get "/v1/nodes" do
+    nodes = Repo.all(from n in Node, order_by: [asc: n.id])
+    send_json(conn, 200, nodes, "nodes_list")
+  end
+
+  post "/v1/nodes" do
+    with {:ok, body, _} <- Plug.Conn.read_body(conn),
+         {:ok, params} <- decode(body),
+         changeset <- Node.changeset(%Node{}, params),
+         {:ok, node} <- Repo.insert(changeset) do
+      send_json(conn, 201, node, "node_created")
+    else
+      {:error, :bad_json} -> send_error(conn, 400, "API-001", "bad_json", %{})
+      {:error, err}       -> send_error(conn, 422, "DB-001", "node_create_failed", %{reason: inspect(err)})
+    end
+  end
+
+  get "/v1/nodes/:id" do
+    case Repo.get(Node, String.to_integer(id)) do
+      %Node{} = node -> send_json(conn, 200, node, "node_fetched")
+      nil -> send_error(conn, 404, "API-001", "node_not_found", %{})
+    end
+  end
+
+  patch "/v1/nodes/:id" do
+    with {:ok, body, _} <- Plug.Conn.read_body(conn),
+         {:ok, params} <- decode(body),
+         %Node{} = node <- Repo.get(Node, String.to_integer(id)) || throw(:not_found),
+         changeset <- Node.changeset(node, params),
+         {:ok, node2} <- Repo.update(changeset) do
+      send_json(conn, 200, node2, "node_updated")
+    else
+      :not_found -> send_error(conn, 404, "API-001", "node_not_found", %{})
+      {:error, :bad_json} -> send_error(conn, 400, "API-001", "bad_json", %{})
+      {:error, err} -> send_error(conn, 422, "DB-001", "node_update_failed", %{reason: inspect(err)})
+    end
+  end
+
+  delete "/v1/nodes/:id" do
+    case Repo.get(Node, String.to_integer(id)) do
+      %Node{} = node ->
+        case Repo.delete(node) do
+          {:ok, _} -> (Log.info("node_deleted", "Router", %{details: %{id: node.id}}); send_resp(conn, 204, ""))
+          {:error, err} -> send_error(conn, 422, "DB-001", "node_delete_failed", %{reason: inspect(err)})
+        end
+      nil -> send_error(conn, 404, "API-001", "node_not_found", %{})
     end
   end
 

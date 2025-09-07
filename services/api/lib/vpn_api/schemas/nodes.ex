@@ -10,6 +10,7 @@ defmodule VpnApi.Schemas.Node do
     field :version, :string
     field :last_sync_at, :utc_datetime
     field :reality_dest, :string
+    field :reality_private_key, :string
     field :reality_public_key, :string
     field :reality_server_names, {:array, :string}, default: []
     field :reality_short_ids, {:array, :string}, default: []
@@ -18,6 +19,21 @@ defmodule VpnApi.Schemas.Node do
     timestamps()
   end
   def changeset(struct, attrs) do
-    struct |> cast(attrs, [:region, :ip, :status, :version, :last_sync_at, :reality_dest, :reality_public_key, :reality_server_names, :reality_short_ids, :listen_port]) |> validate_required([:region, :ip]) |> validate_number(:listen_port, greater_than: 0, less_than: 65536)
+    struct
+    |> cast(attrs, [
+      :region,
+      :ip,
+      :status,
+      :version,
+      :last_sync_at,
+      :reality_dest,
+      :reality_private_key,
+      :reality_public_key,
+      :reality_server_names,
+      :reality_short_ids,
+      :listen_port
+    ])
+    |> validate_required([:region, :ip])
+    |> validate_number(:listen_port, greater_than: 0, less_than: 65536)
   end
 end

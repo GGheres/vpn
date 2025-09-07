@@ -1,7 +1,7 @@
 FROM elixir:1.16-alpine
 
 # Базовые пакеты для сборки
-RUN apk add --no-cache build-base git curl openssl bash
+RUN apk add --no-cache build-base git curl openssl bash docker-cli
 
 # Hex/Rebar
 RUN mix local.hex --force && mix local.rebar --force

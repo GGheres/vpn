@@ -1,0 +1,26 @@
+FROM elixir:1.16-alpine AS builder
+
+RUN apk add --no-cache build-base git curl openssl bash
+WORKDIR /app
+
+# install hex/rebar
+RUN mix local.hex --force && mix local.rebar --force
+
+ENV MIX_ENV=prod
+COPY mix.exs mix.lock ./
+RUN mix deps.get --only prod
+
+COPY . .
+RUN mix compile
+RUN mix release
+
+# Runtime stage
+FROM elixir:1.16-alpine AS runtime
+RUN apk add --no-cache bash openssl ncurses-libs docker-cli
+WORKDIR /app
+
+COPY --from=builder /app/_build/prod/rel/vpn_api ./
+
+ENV HOME=/app
+EXPOSE 4000
+CMD ["/app/bin/vpn_api", "start"]

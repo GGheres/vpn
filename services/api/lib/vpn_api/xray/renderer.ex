@@ -22,6 +22,7 @@ defmodule VpnApi.Xray.Renderer do
               "realitySettings" => %{
                 "dest" => Map.get(params, "dest", "www.cloudflare.com:443"),
                 "serverNames" => Map.get(params, "serverNames", ["www.cloudflare.com"]),
+                "privateKey" => Map.get(params, "privateKey", ""),
                 "publicKey" => Map.get(params, "publicKey", ""),
                 "shortIds" => Map.get(params, "shortIds", ["0123456789abcdef"]),
                 "xver" => 0,

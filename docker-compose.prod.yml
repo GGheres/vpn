@@ -1,0 +1,78 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile.prod
+    image: vpn/api:prod
+    profiles: ["prod"]
+    environment:
+      - APP_ENV=${APP_ENV:-prod}
+      - APP_SECRET=${APP_SECRET:-please_change_me}
+      - APP_PORT=${APP_PORT:-4000}
+      - APP_HOST=${APP_HOST:-0.0.0.0}
+      - POSTGRES_USER=${POSTGRES_USER:-vpn}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-vpn}
+      - POSTGRES_DB=${POSTGRES_DB:-vpn}
+      - POSTGRES_HOST=${POSTGRES_HOST:-db}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    ports:
+      - "4000:4000"
+    depends_on:
+      - db
+      - redis
+      - xray
+    volumes:
+      - ./xray:/xray:rw
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  bot:
+    build:
+      context: ./services/bot
+      dockerfile: Dockerfile.prod
+    image: vpn/bot:prod
+    profiles: ["prod"]
+    environment:
+      - APP_ENV=${APP_ENV:-prod}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-changeme}
+      - API_BASE=${API_BASE:-http://api:4000}
+      - VLESS_HOST=${VLESS_HOST:-localhost}
+      - XRAY_LISTEN_PORT=${XRAY_LISTEN_PORT:-443}
+      - XRAY_PUBLIC_KEY=${XRAY_PUBLIC_KEY:-}
+      - XRAY_SHORT_ID=${XRAY_SHORT_ID:-0123456789abcdef}
+      - XRAY_REALITY_SERVER_NAME=${XRAY_REALITY_SERVER_NAME:-www.cloudflare.com}
+    depends_on:
+      - api
+
+  db:
+    image: postgres:16-alpine
+    profiles: ["prod"]
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-vpn}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-vpn}
+      - POSTGRES_DB=${POSTGRES_DB:-vpn}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["prod"]
+    ports:
+      - "6379:6379"
+
+  xray:
+    image: teddysun/xray
+    container_name: xray
+    profiles: ["prod"]
+    volumes:
+      - ./xray/config.json:/etc/xray/config.json:ro
+    ports:
+      - "443:443"
+    restart: unless-stopped
+
+volumes:
+  db-data:
