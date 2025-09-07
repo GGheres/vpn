@@ -35,7 +35,7 @@ services:
     environment:
       - APP_ENV=${APP_ENV:-dev}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-changeme}
-      - API_BASE=${API_BASE:-http://api:4000}
+      - API_BASE=${BOT_API_BASE:-http://api:4000}
       - XRAY_CLIENT_UUID=${XRAY_CLIENT_UUID:-11111111-1111-1111-1111-111111111111}
       - VLESS_HOST=${VLESS_HOST:-localhost}
       - XRAY_LISTEN_PORT=${XRAY_LISTEN_PORT:-443}

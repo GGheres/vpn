@@ -47,8 +47,8 @@ defmodule VpnApi.Router do
   post "/v1/issue" do
     p = conn.body_params
     with tg_id when is_integer(tg_id) <- Map.get(p, "tg_id"),
-         %User{} = user <- Repo.one(from u in User, where: u.tg_id == ^tg_id, order_by: [asc: u.id], limit: 1) || throw(:not_found_user),
-         node <- pick_node(Map.get(p, "node_id")),
+         %User{} = user <- Repo.one(from u in User, where: u.tg_id == ^tg_id, order_by: [asc: u.id], limit: 1) || {:error, :not_found_user},
+         %Node{} = node <- pick_node(Map.get(p, "node_id")) || {:error, :not_found_node},
          {:ok, cred} <- ensure_credential(user.id, node.id),
          {:ok, link} <- Vless.render(cred.uuid, %{
            host: Map.get(p, "host", "localhost"),
@@ -61,8 +61,8 @@ defmodule VpnApi.Router do
       Log.info("vless_issued", "Router", %{user_id: user.id, details: %{node_id: node.id}})
       send_json(conn, 200, %{vless: link}, "vless_issued")
     else
-      :not_found_user -> send_error(conn, 404, "API-001", "user_not_found", %{})
-      :not_found_node -> send_error(conn, 404, "API-001", "node_not_found", %{})
+      {:error, :not_found_user} -> send_error(conn, 404, "API-001", "user_not_found", %{})
+      {:error, :not_found_node} -> send_error(conn, 404, "API-001", "node_not_found", %{})
       {:error, %{error_code: code} = e} -> send_error(conn, 500, code, "vless_issue_failed", e)
       {:error, reason} -> send_error(conn, 500, "VPN-003", "vless_issue_failed", %{reason: inspect(reason)})
       _ -> send_error(conn, 400, "API-001", "bad_request", %{})
@@ -167,8 +167,8 @@ defmodule VpnApi.Router do
 
   # Picks a node by id or the first available one.
   # Raises (via `throw(:not_found_node)`) if none found.
-  defp pick_node(nil), do: Repo.one(from n in Node, order_by: [asc: n.id], limit: 1) || throw(:not_found_node)
-  defp pick_node(id),  do: Repo.get(Node, id) || throw(:not_found_node)
+  defp pick_node(nil), do: Repo.one(from n in Node, order_by: [asc: n.id], limit: 1)
+  defp pick_node(id),  do: Repo.get(Node, id)
 
   # Ensures there is a credential for `{user_id, node_id}`.
   # Returns `{:ok, %Credential{}}` or `{:error, %{error_code: String.t(), reason: term()}}`.
