@@ -10,6 +10,7 @@ COPY mix.exs mix.lock ./
 RUN mix deps.get --only prod
 
 COPY . .
+RUN mix deps.get --only prod
 RUN mix compile
 RUN mix release
 
@@ -21,4 +22,3 @@ COPY --from=builder /app/_build/prod/rel/vpn_bot ./
 
 ENV HOME=/app
 CMD ["/app/bin/vpn_bot", "start"]
-

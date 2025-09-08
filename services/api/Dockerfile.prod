@@ -11,6 +11,7 @@ COPY mix.exs mix.lock ./
 RUN mix deps.get --only prod
 
 COPY . .
+RUN mix deps.get --only prod
 RUN mix compile
 RUN mix release
 

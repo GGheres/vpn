@@ -8,7 +8,7 @@
         "clients": [
           {
             "flow": "xtls-rprx-vision",
-            "id": "4b005809-6e18-48f8-9db7-23c13584ce67"
+            "id": "c19e18f3-afea-4d5b-8e9a-4406872fa23b"
           }
         ],
         "decryption": "none"
@@ -16,11 +16,11 @@
       "streamSettings": {
         "network": "tcp",
         "realitySettings": {
-          "dest": "www.cloudflare.com:443",
+          "dest": "www.google.com:443",
           "privateKey": "gH5NlnfC9xByCiLjh7Z6AhTnx7qa713D88q5xLlS52w",
           "publicKey": "4Geb20M43QT8A1PigvpXCNy5V1sl6GeZ3U6Dx6dR_jI",
           "serverNames": [
-            "www.cloudflare.com"
+            "www.google.com"
           ],
           "shortIds": [
             "0123456789abcdef"

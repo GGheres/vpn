@@ -36,7 +36,7 @@ XRAY_SHORT_ID="${XRAY_SHORT_ID:-0123456789abcdef}"
 XRAY_DEST="${XRAY_DEST:-www.cloudflare.com:443}"
 XRAY_LISTEN_PORT="${XRAY_LISTEN_PORT:-443}"
 
-read -r -d '' JSON <<JSON
+JSON=$(cat <<JSON
 {
   "privateKey": "${XRAY_PRIVATE_KEY}",
   "publicKey": "${XRAY_PUBLIC_KEY}",
@@ -46,6 +46,7 @@ read -r -d '' JSON <<JSON
   "listen_port": ${XRAY_LISTEN_PORT}
 }
 JSON
+)
 
 echo "Syncing node ${NODE_ID} to ${API_BASE} ..."
 curl -fsS -X POST "${API_BASE}/v1/nodes/${NODE_ID}/sync" \
