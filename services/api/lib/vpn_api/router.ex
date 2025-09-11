@@ -59,7 +59,8 @@ defmodule VpnApi.Router do
            label: Map.get(p, "label", "vpn")
          }) do
       Log.info("vless_issued", "Router", %{user_id: user.id, details: %{node_id: node.id}})
-      send_json(conn, 200, %{vless: link}, "vless_issued")
+      # Also include node_id so clients (e.g., bot) can optionally trigger sync/reload
+      send_json(conn, 200, %{vless: link, node_id: node.id}, "vless_issued")
     else
       {:error, :not_found_user} -> send_error(conn, 404, "API-001", "user_not_found", %{})
       {:error, :not_found_node} -> send_error(conn, 404, "API-001", "node_not_found", %{})

@@ -39,17 +39,19 @@ defmodule VpnBot.Handler do
       label: "vpn"
     }
 
-    with {:ok, link} <- issue_link(api_base, payload) do
+    with {:ok, {link, node_id}} <- issue_link(api_base, payload),
+         :ok <- maybe_sync_and_reload(api_base, node_id) do
       ExGram.send_message(msg.chat.id, "Твой конфиг:\n" <> link)
-      Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: msg.from.id}))
+      Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: msg.from.id, details: %{node_id: node_id}}))
     else
       {:error, :user_not_found} ->
         # Авто-создание пользователя и повторная попытка
         _ = Req.post(api_base <> "/v1/users", json: %{tg_id: msg.from.id, status: "active"})
         case issue_link(api_base, payload) do
-          {:ok, link} ->
+          {:ok, {link, node_id}} ->
+            _ = maybe_sync_and_reload(api_base, node_id)
             ExGram.send_message(msg.chat.id, "Твой конфиг:\n" <> link)
-            Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: msg.from.id}))
+            Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: msg.from.id, details: %{node_id: node_id}}))
           {:error, reason} ->
             ExGram.send_message(msg.chat.id, "Ошибка выдачи конфига: #{inspect(reason)}")
           _ -> :ok
@@ -76,12 +78,27 @@ defmodule VpnBot.Handler do
   # Возвращает `{:ok, link}` или `{:error, reason}`.
   defp issue_link(api_base, payload) do
     case Req.post(api_base <> "/v1/issue", json: payload) do
-      {:ok, %Req.Response{status: 200, body: %{"vless" => link}}} -> {:ok, link}
+      # Новый формат: {"vless": link, "node_id": id}
+      {:ok, %Req.Response{status: 200, body: %{"vless" => link} = body}} ->
+        {:ok, {link, Map.get(body, "node_id")}}
+      # Пользователь не найден
       {:ok, %Req.Response{status: 404, body: %{"event" => "user_not_found"}}} -> {:error, :user_not_found}
       {:ok, %Req.Response{} = resp} -> {:error, {:bad_status, resp.status}}
       {:error, e} -> {:error, e}
     end
   end
+
+  # При наличии node_id — триггерим синхронизацию Xray и горячую перезагрузку.
+  # Возвращает :ok даже если node_id отсутствует (для обратной совместимости).
+  defp maybe_sync_and_reload(_api_base, nil), do: :ok
+  defp maybe_sync_and_reload(api_base, node_id) when is_integer(node_id) do
+    _ = Req.post(api_base <> "/v1/nodes/" <> Integer.to_string(node_id) <> "/sync", json: %{})
+    case Req.post(api_base <> "/v1/nodes/" <> Integer.to_string(node_id) <> "/reload", json: %{}) do
+      {:ok, %Req.Response{status: 200}} -> :ok
+      _ -> :ok
+    end
+  end
+  defp maybe_sync_and_reload(_api_base, _), do: :ok
 
   # Безопасно приводит строку/число к integer, иначе возвращает `default`.
   defp to_int(nil, default), do: default
