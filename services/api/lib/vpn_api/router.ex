@@ -336,10 +336,11 @@ defmodule VpnApi.Router do
     placeholders = MapSet.new(["<XRAY_PUBLIC_KEY>", "<XRAY_REALITY_SERVER_NAME>", "<XRAY_SHORT_ID>", "<ВАШ_PUBLIC_IP>"])
 
     clean_bin = fn val ->
-      case val do
-        v when is_binary(v) and (v == "" or MapSet.member?(placeholders, v)) -> :drop
-        v when is_binary(v) -> v
-        _ -> :drop
+      cond do
+        not is_binary(val) -> :drop
+        val == "" -> :drop
+        MapSet.member?(placeholders, val) -> :drop
+        true -> val
       end
     end
 
@@ -385,13 +386,13 @@ defmodule VpnApi.Router do
       end
     # pass through other attrs like region/status/version/listen_port if provided
     base
-    |> then(fn m ->
+    |> (fn m ->
       m = if Map.has_key?(attrs, "region"), do: Map.put(m, "region", Map.get(attrs, "region")), else: m
       m = if Map.has_key?(attrs, "status"), do: Map.put(m, "status", Map.get(attrs, "status")), else: m
       m = if Map.has_key?(attrs, "version"), do: Map.put(m, "version", Map.get(attrs, "version")), else: m
       m = if Map.has_key?(attrs, "listen_port"), do: Map.put(m, "listen_port", Map.get(attrs, "listen_port")), else: m
       m
-    end)
+    end).()
   end
   defp sanitize_node_attrs(other), do: %{}
 
