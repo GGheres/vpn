@@ -11,7 +11,10 @@ defmodule VpnBot.Handler do
   require Logger
 
   command("start", description: "Start bot")
-  command("config", description: "Get config link")
+  command("config", description: "Get trial link (24h)")
+  command("trial", description: "Get trial link (24h)")
+  command("week", description: "Get paid link (7d)")
+  command("month", description: "Get paid link (30d)")
   command("renew", description: "Renew subscription")
 
   # Обработка команды /start — отправляет приветствие и список команд
@@ -22,6 +25,22 @@ defmodule VpnBot.Handler do
 
   # Обработка команды /config — запрашивает ссылку у API и отправляет её пользователю
   def handle({:command, :config, msg}, _cnt) do
+    issue_for(msg, "trial", 24)
+  end
+
+  def handle({:command, :trial, msg}, _cnt) do
+    issue_for(msg, "trial", 24)
+  end
+
+  def handle({:command, :week, msg}, _cnt) do
+    issue_for(msg, "week", 24 * 7)
+  end
+
+  def handle({:command, :month, msg}, _cnt) do
+    issue_for(msg, "month", 24 * 30)
+  end
+
+  defp issue_for(msg, plan, ttl_hours) do
     api_base = System.get_env("API_BASE", "http://api:4000")
     host = System.get_env("VLESS_HOST", "localhost")
     port = System.get_env("XRAY_LISTEN_PORT", "443") |> to_int(443)
@@ -36,7 +55,9 @@ defmodule VpnBot.Handler do
       public_key: public_key,
       short_id: short_id,
       server_name: server_name,
-      label: "vpn"
+      label: "vpn",
+      plan: plan,
+      ttl_hours: ttl_hours
     }
 
     with {:ok, {link, node_id}} <- issue_link(api_base, payload),

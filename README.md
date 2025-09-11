@@ -21,6 +21,20 @@ make prod-up      # uses compose -f docker-compose.prod.yml --profile prod
 
 API endpoints and nodes CRUD are listed in `docs/api.md`.
 
+### Bot issuing links with TTL
+
+The Telegram bot now issues time‑limited links by default and triggers Xray sync + hot reload automatically:
+
+- `/config` or `/trial` — trial link valid for 24h
+- `/week` — paid link valid for 7 days
+- `/month` — paid link valid for 30 days
+
+The API stores credential expiry and `xray` sync includes only non‑expired credentials. To prune expired clients regularly, schedule periodic sync, e.g. via cron:
+
+```
+*/15 * * * * cd /opt/vpn && USE_LOCALHOST=1 NODE_ID=1 bash scripts/api_sync.sh >/dev/null 2>&1
+```
+
 ## Make targets
 
 Convenience targets for local/dev:

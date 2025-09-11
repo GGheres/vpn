@@ -11,6 +11,7 @@ defmodule VpnApi.Schemas.Credential do
   schema "credentials" do
     field :uuid, Ecto.UUID
     field :revoked_at, :utc_datetime
+    field :expires_at, :utc_datetime
     belongs_to :user, VpnApi.Schemas.User
     belongs_to :node, VpnApi.Schemas.Node
     timestamps()
@@ -19,6 +20,11 @@ defmodule VpnApi.Schemas.Credential do
   Validates creation/update params for a credential and enforces constraints.
   """
   def changeset(struct, attrs) do
-    struct |> cast(attrs, [:user_id, :node_id, :uuid, :revoked_at]) |> validate_required([:user_id, :node_id, :uuid]) |> assoc_constraint(:user) |> assoc_constraint(:node) |> unique_constraint(:uuid)
+    struct
+    |> cast(attrs, [:user_id, :node_id, :uuid, :revoked_at, :expires_at])
+    |> validate_required([:user_id, :node_id, :uuid])
+    |> assoc_constraint(:user)
+    |> assoc_constraint(:node)
+    |> unique_constraint(:uuid)
   end
 end

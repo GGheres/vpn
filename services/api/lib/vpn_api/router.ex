@@ -46,10 +46,11 @@ defmodule VpnApi.Router do
   # Body accepts keys: tg_id, host, port, public_key, short_id, server_name, label, node_id?
   post "/v1/issue" do
     p = conn.body_params
+    ttl_hours = pick_ttl_hours(p)
     with tg_id when is_integer(tg_id) <- Map.get(p, "tg_id"),
          %User{} = user <- Repo.one(from u in User, where: u.tg_id == ^tg_id, order_by: [asc: u.id], limit: 1) || {:error, :not_found_user},
          %Node{} = node <- pick_node(Map.get(p, "node_id")) || {:error, :not_found_node},
-         {:ok, cred} <- ensure_credential(user.id, node.id),
+         {:ok, cred} <- ensure_credential(user.id, node.id, ttl_hours),
          {:ok, link} <- Vless.render(cred.uuid, %{
            host: Map.get(p, "host", "localhost"),
            port: Map.get(p, "port", 443),
@@ -76,7 +77,16 @@ defmodule VpnApi.Router do
     with node_id <- String.to_integer(id),
          %Node{} = node <- Repo.get(Node, node_id) || throw(:not_found_node) do
 
-      uuids = Repo.all(from c in Credential, where: c.node_id == ^node_id, select: c.uuid)
+      now = DateTime.utc_now()
+      uuids =
+        Repo.all(
+          from c in Credential,
+            where:
+              c.node_id == ^node_id and is_nil(c.revoked_at) and (
+                is_nil(c.expires_at) or c.expires_at > ^now
+              ),
+            select: c.uuid
+        )
 
       params =
         %{
@@ -173,14 +183,52 @@ defmodule VpnApi.Router do
 
   # Ensures there is a credential for `{user_id, node_id}`.
   # Returns `{:ok, %Credential{}}` or `{:error, %{error_code: String.t(), reason: term()}}`.
-  defp ensure_credential(user_id, node_id) do
+  defp ensure_credential(user_id, node_id, ttl_hours) do
+    expires_at =
+      case ttl_hours do
+        n when is_integer(n) and n > 0 -> DateTime.add(DateTime.utc_now(), n * 3600, :second)
+        _ -> nil
+      end
+
     case Repo.one(from c in Credential, where: c.user_id == ^user_id and c.node_id == ^node_id) do
-      %Credential{} = c -> {:ok, c}
-      nil -> %Credential{user_id: user_id, node_id: node_id, uuid: Ecto.UUID.generate()} |> Credential.changeset(%{}) |> Repo.insert()
+      %Credential{} = c ->
+        new_exp =
+          cond do
+            is_nil(expires_at) -> nil
+            is_nil(c.expires_at) -> expires_at
+            DateTime.compare(expires_at, c.expires_at) == :gt -> expires_at
+            true -> nil
+          end
+        changes = if new_exp, do: %{expires_at: new_exp}, else: %{}
+        if map_size(changes) == 0, do: {:ok, c}, else: Repo.update(Credential.changeset(c, changes))
+      nil ->
+        attrs = %{user_id: user_id, node_id: node_id, uuid: Ecto.UUID.generate()}
+        attrs = if expires_at, do: Map.put(attrs, :expires_at, expires_at), else: attrs
+        %Credential{} |> Credential.changeset(attrs) |> Repo.insert()
     end
   rescue
     e -> {:error, %{error_code: "DB-001", reason: inspect(e)}}
   end
+
+  # Picks TTL (in hours) from request params. Supports "ttl_hours" or high-level plans.
+  # Plans: trial (24h), week (7d), month (30d).
+  defp pick_ttl_hours(p) do
+    cond do
+      is_integer(Map.get(p, "ttl_hours")) -> Map.get(p, "ttl_hours")
+      is_binary(Map.get(p, "ttl_hours")) ->
+        case Integer.parse(Map.get(p, "ttl_hours")) do
+          {n, _} when n > 0 -> n
+          _ -> plan_to_ttl(Map.get(p, "plan"))
+        end
+      true -> plan_to_ttl(Map.get(p, "plan"))
+    end
+  end
+
+  defp plan_to_ttl(nil), do: nil
+  defp plan_to_ttl("trial"), do: 24
+  defp plan_to_ttl("week"), do: 24 * 7
+  defp plan_to_ttl("month"), do: 24 * 30
+  defp plan_to_ttl(_), do: nil
 
   # Sends a JSON response and logs the event as info.
   defp send_json(conn, status, data, event), do: (Log.info(event, "Router", %{details: data}); conn |> put_resp_content_type("application/json") |> send_resp(status, Jason.encode!(data)))
