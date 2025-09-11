@@ -29,7 +29,7 @@ defmodule VpnApi.Vless do
     sni  = Map.get(opts, :server_name, "")
     lbl  = URI.encode_www_form(Map.get(opts, :label, "vpn"))
     link =
-      "vless://#{uuid}@#{host}:#{port}?encryption=none&security=reality&fp=chrome" <>
+      "vless://#{uuid}@#{host}:#{port}?encryption=none&security=reality&fp=chrome&flow=xtls-rprx-vision" <>
       (if pk  != "", do: "&pbk=#{pk}", else: "") <>
       (if sid != "", do: "&sid=#{sid}", else: "") <>
       (if sni != "", do: "&sni=#{sni}", else: "") <>
