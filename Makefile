@@ -48,9 +48,11 @@ quickstart:
 	  sleep 1; \
 	done; echo "API not ready after 60s" >&2; exit 1'
 	@echo "[3/4] Ensuring default node exists ..."
-	bash scripts/init_node.sh || true
+	USE_LOCALHOST=1 bash scripts/init_node.sh || true
 	@echo "[4/5] Syncing Xray config with REALITY params from .env ..."
-	bash scripts/api_sync.sh || true
+	USE_LOCALHOST=1 bash scripts/api_sync.sh || true
 	@echo "[5/5] Hot-reloading xray ..."
 	bash scripts/xray_reload.sh || true
+	@echo "[extra] Making sure xray is up with new config ..."
+	docker compose -f docker-compose.prod.yml --profile prod up -d xray
 	@echo "Done. API at http://localhost:4000/health"

@@ -4,6 +4,7 @@ set -euo pipefail
 
 # Load .env if present, but do NOT override already-set env vars
 # Remember if API_BASE was preset by the caller (to not override it later)
+# capture initial API_BASE if set (for information only)
 _PRESET_API_BASE="${API_BASE:-}"
 if [[ -f .env ]]; then
   while IFS= read -r line; do
@@ -24,8 +25,8 @@ fi
 NODE_ID="${NODE_ID:-${1:-1}}"
 API_BASE="${API_BASE:-http://localhost:4000}"
 
-# Convenience: force localhost base when USE_LOCALHOST=1 (unless caller already set API_BASE)
-if [[ "${USE_LOCALHOST:-}" == "1" && -z "${_PRESET_API_BASE}" ]]; then
+# Force localhost base when USE_LOCALHOST=1 (host-side scripts)
+if [[ "${USE_LOCALHOST:-}" == "1" ]]; then
   API_BASE="http://localhost:4000"
 fi
 

@@ -151,7 +151,7 @@ defmodule VpnApi.Router do
 
   # POST /v1/nodes — create node
   post "/v1/nodes" do
-    params = conn.body_params
+    params = sanitize_node_attrs(conn.body_params)
     case Node.changeset(%Node{}, params) |> Repo.insert() do
       {:ok, node} -> send_json(conn, 201, node, "node_created")
       {:error, err} -> send_error(conn, 422, "DB-001", "node_create_failed", %{reason: inspect(err)})
