@@ -48,6 +48,7 @@ defmodule VpnBot.Handler do
     short_id = System.get_env("XRAY_SHORT_ID", "")
     server_name = System.get_env("XRAY_REALITY_SERVER_NAME", "")
 
+    single_active = true
     payload = %{
       tg_id: msg.from.id,
       host: host,
@@ -55,12 +56,16 @@ defmodule VpnBot.Handler do
       public_key: public_key,
       short_id: short_id,
       server_name: server_name,
-      label: "vpn",
+      label: "vpn-" <> plan,
       plan: plan,
-      ttl_hours: ttl_hours
+      ttl_hours: ttl_hours,
+      force_new: true,
+      single_active: single_active,
+      revoke_scope: "user",
+      sync: true
     }
 
-    with {:ok, {link, node_id, synced}} <- issue_link(api_base, Map.put(payload, :sync, true)),
+    with {:ok, {link, node_id, synced}} <- issue_link(api_base, payload),
          :ok <- maybe_sync_and_reload_unless_synced(api_base, node_id, synced) do
       ExGram.send_message(msg.chat.id, "Твой конфиг:\n" <> link)
       Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: msg.from.id, details: %{node_id: node_id}}))

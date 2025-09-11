@@ -19,12 +19,19 @@ defmodule VpnApi.Xray.Renderer do
 
   Returns `{:ok, map}` with the config or `{:error, %{error_code: String.t(), reason: term}}`.
   """
-  @spec render(map(), [binary()]) :: {:ok, map()} | {:error, map()}
-  def render(params, uuids) when is_map(params) and is_list(uuids) do
+  @spec render(map(), list()) :: {:ok, map()} | {:error, map()}
+  def render(params, list) when is_map(params) and is_list(list) do
     try do
-      clients = Enum.map(uuids, &%{"id" => &1, "flow" => "xtls-rprx-vision"})
+      loglevel = Map.get(params, "loglevel", "warning")
+      clients =
+        case list do
+          [%{} | _] ->
+            Enum.map(list, fn m -> m |> Map.put_new("flow", "xtls-rprx-vision") end)
+          _ ->
+            Enum.map(list, &%{"id" => &1, "flow" => "xtls-rprx-vision"})
+        end
       config = %{
-        "log" => %{"loglevel" => "warning"},
+        "log" => %{"loglevel" => loglevel},
         "inbounds" => [
           %{
             "tag" => "vless-in",

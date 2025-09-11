@@ -47,10 +47,14 @@ defmodule VpnApi.Router do
   post "/v1/issue" do
     p = conn.body_params
     ttl_hours = pick_ttl_hours(p)
+    single_active = truthy?(Map.get(p, "single_active"))
+    revoke_scope = Map.get(p, "revoke_scope", "user_node")
+    force_new = truthy?(Map.get(p, "force_new"))
     with tg_id when is_integer(tg_id) <- Map.get(p, "tg_id"),
          %User{} = user <- Repo.one(from u in User, where: u.tg_id == ^tg_id, order_by: [asc: u.id], limit: 1) || {:error, :not_found_user},
          %Node{} = node <- pick_node(Map.get(p, "node_id")) || {:error, :not_found_node},
-         {:ok, cred} <- ensure_credential(user.id, node.id, ttl_hours),
+         _ <- if single_active, do: revoke_credentials(user.id, node.id, revoke_scope), else: :ok,
+         {:ok, cred} <- ensure_credential(user.id, node.id, ttl_hours, force_new),
          {:ok, link} <- Vless.render(cred.uuid, %{
            host: Map.get(p, "host", "localhost"),
            port: Map.get(p, "port", 443),
@@ -92,15 +96,17 @@ defmodule VpnApi.Router do
          %Node{} = node <- Repo.get(Node, node_id) || throw(:not_found_node) do
 
       now = DateTime.utc_now()
-      uuids =
+      clients =
         Repo.all(
           from c in Credential,
+            join: u in User, on: u.id == c.user_id,
             where:
               c.node_id == ^node_id and is_nil(c.revoked_at) and (
                 is_nil(c.expires_at) or c.expires_at > ^now
               ),
-            select: c.uuid
+            select: {c.uuid, u.id, u.tg_id}
         )
+        |> Enum.map(fn {uuid, uid, tg} -> %{"id" => uuid, "email" => format_email(uid, tg)} end)
 
       params =
         %{
@@ -113,11 +119,11 @@ defmodule VpnApi.Router do
         }
         |> Map.merge(json)
 
-      case Renderer.render(params, uuids) do
+      case Renderer.render(params, clients) do
         {:ok, cfg} ->
           case Renderer.write!(cfg, "/xray/config.json") do
-            :ok -> Log.info("xray_config_written", "Router", %{details: %{node_id: id, clients: length(uuids)}})
-                   send_json(conn, 202, %{"written" => true, "clients" => length(uuids)}, "xray_config_written")
+            :ok -> Log.info("xray_config_written", "Router", %{details: %{node_id: id, clients: length(clients)}})
+                   send_json(conn, 202, %{"written" => true, "clients" => length(clients)}, "xray_config_written")
             {:error, e} -> send_error(conn, 500, "VPN-003", "xray_config_write_failed", %{reason: inspect(e)})
           end
         {:error, e} -> send_error(conn, 500, "VPN-003", "xray_config_render_failed", e)
@@ -197,7 +203,7 @@ defmodule VpnApi.Router do
 
   # Ensures there is a credential for `{user_id, node_id}`.
   # Returns `{:ok, %Credential{}}` or `{:error, %{error_code: String.t(), reason: term()}}`.
-  defp ensure_credential(user_id, node_id, ttl_hours) do
+  defp ensure_credential(user_id, node_id, ttl_hours, force_new) do
     expires_at =
       case ttl_hours do
         n when is_integer(n) and n > 0 -> DateTime.add(DateTime.utc_now(), n * 3600, :second)
@@ -206,6 +212,11 @@ defmodule VpnApi.Router do
 
     case Repo.one(from c in Credential, where: c.user_id == ^user_id and c.node_id == ^node_id) do
       %Credential{} = c ->
+        if force_new do
+          attrs = %{user_id: user_id, node_id: node_id, uuid: Ecto.UUID.generate()}
+          attrs = if expires_at, do: Map.put(attrs, :expires_at, expires_at), else: attrs
+          %Credential{} |> Credential.changeset(attrs) |> Repo.insert()
+        else
         new_exp =
           cond do
             is_nil(expires_at) -> nil
@@ -215,6 +226,7 @@ defmodule VpnApi.Router do
           end
         changes = if new_exp, do: %{expires_at: new_exp}, else: %{}
         if map_size(changes) == 0, do: {:ok, c}, else: Repo.update(Credential.changeset(c, changes))
+        end
       nil ->
         attrs = %{user_id: user_id, node_id: node_id, uuid: Ecto.UUID.generate()}
         attrs = if expires_at, do: Map.put(attrs, :expires_at, expires_at), else: attrs
@@ -222,6 +234,15 @@ defmodule VpnApi.Router do
     end
   rescue
     e -> {:error, %{error_code: "DB-001", reason: inspect(e)}}
+  end
+
+  # Formats an Xray client email label to identify the user in logs.
+  defp format_email(user_id, tg_id) do
+    tg = case tg_id do
+      nil -> ""
+      v -> "|tg:" <> to_string(v)
+    end
+    "u:" <> to_string(user_id) <> tg
   end
 
   # Picks TTL (in hours) from request params. Supports "ttl_hours" or high-level plans.
@@ -255,16 +276,23 @@ defmodule VpnApi.Router do
   defp inline_sync_and_reload(node_id) do
     with %Node{} = node <- Repo.get(Node, node_id),
          now <- DateTime.utc_now(),
-         uuids <- Repo.all(from c in Credential, where: c.node_id == ^node_id and is_nil(c.revoked_at) and (is_nil(c.expires_at) or c.expires_at > ^now), select: c.uuid),
+         clients <- Repo.all(
+                     from c in Credential,
+                       join: u in User, on: u.id == c.user_id,
+                       where: c.node_id == ^node_id and is_nil(c.revoked_at) and (is_nil(c.expires_at) or c.expires_at > ^now),
+                       select: {c.uuid, u.id, u.tg_id}
+                   ) |> Enum.map(fn {uuid, uid, tg} -> %{"id" => uuid, "email" => format_email(uid, tg)} end),
+         lvl <- System.get_env("XRAY_LOG_LEVEL") || "error",
          params <- %{
            "dest" => node.reality_dest || "www.cloudflare.com:443",
            "serverNames" => node.reality_server_names || [],
            "privateKey" => node.reality_private_key || "",
            "publicKey" => node.reality_public_key || "",
            "shortIds" => node.reality_short_ids || [],
-           "listen_port" => node.listen_port || 443
+           "listen_port" => node.listen_port || 443,
+           "loglevel" => lvl
          },
-         {:ok, cfg} <- Renderer.render(params, uuids),
+         {:ok, cfg} <- Renderer.render(params, clients),
          :ok <- Renderer.write!(cfg, "/xray/config.json") do
       case Renderer.reload() do
         :ok -> :ok
@@ -273,6 +301,19 @@ defmodule VpnApi.Router do
     else
       _ -> {:error, :sync_failed}
     end
+  end
+
+  # Revoke existing active credentials for a user (scope: "user" or "user_node").
+  defp revoke_credentials(user_id, node_id, scope) do
+    now = DateTime.utc_now()
+    base = from c in Credential,
+      where: c.user_id == ^user_id and is_nil(c.revoked_at) and (is_nil(c.expires_at) or c.expires_at > ^now)
+    q = case scope do
+      "user" -> base
+      _ -> from c in base, where: c.node_id == ^node_id
+    end
+    Repo.update_all(q, set: [revoked_at: now])
+    :ok
   end
 
   # Sends a JSON response and logs the event as info.

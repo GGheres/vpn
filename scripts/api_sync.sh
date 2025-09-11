@@ -35,6 +35,7 @@ XRAY_REALITY_SERVER_NAME="${XRAY_REALITY_SERVER_NAME:-www.cloudflare.com}"
 XRAY_SHORT_ID="${XRAY_SHORT_ID:-0123456789abcdef}"
 XRAY_DEST="${XRAY_DEST:-www.cloudflare.com:443}"
 XRAY_LISTEN_PORT="${XRAY_LISTEN_PORT:-443}"
+XRAY_LOG_LEVEL="${XRAY_LOG_LEVEL:-error}"
 
 JSON=$(cat <<JSON
 {
@@ -43,7 +44,8 @@ JSON=$(cat <<JSON
   "dest": "${XRAY_DEST}",
   "serverNames": ["${XRAY_REALITY_SERVER_NAME}"],
   "shortIds": ["${XRAY_SHORT_ID}"],
-  "listen_port": ${XRAY_LISTEN_PORT}
+  "listen_port": ${XRAY_LISTEN_PORT},
+  "loglevel": "${XRAY_LOG_LEVEL}"
 }
 JSON
 )
