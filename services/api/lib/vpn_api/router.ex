@@ -60,8 +60,22 @@ defmodule VpnApi.Router do
            label: Map.get(p, "label", "vpn")
          }) do
       Log.info("vless_issued", "Router", %{user_id: user.id, details: %{node_id: node.id}})
-      # Also include node_id so clients (e.g., bot) can optionally trigger sync/reload
-      send_json(conn, 200, %{vless: link, node_id: node.id}, "vless_issued")
+
+      # Optional inline sync+reload when sync=true is passed
+      {synced, sync_event} =
+        if truthy?(Map.get(p, "sync")) do
+          case inline_sync_and_reload(node.id) do
+            :ok -> {true, "issue_inline_sync_ok"}
+            {:error, _} -> {false, "issue_inline_sync_failed"}
+          end
+        else
+          {false, nil}
+        end
+
+      if sync_event, do: Log.info(sync_event, "Router", %{details: %{node_id: node.id, synced: synced}})
+
+      # Include node_id and synced flag (if requested) for clients/bots
+      send_json(conn, 200, %{vless: link, node_id: node.id, synced: synced}, "vless_issued")
     else
       {:error, :not_found_user} -> send_error(conn, 404, "API-001", "user_not_found", %{})
       {:error, :not_found_node} -> send_error(conn, 404, "API-001", "node_not_found", %{})
@@ -229,6 +243,37 @@ defmodule VpnApi.Router do
   defp plan_to_ttl("week"), do: 24 * 7
   defp plan_to_ttl("month"), do: 24 * 30
   defp plan_to_ttl(_), do: nil
+
+  # Parse common truthy representations (true/"true"/"1"/1)
+  defp truthy?(true), do: true
+  defp truthy?(1), do: true
+  defp truthy?("true"), do: true
+  defp truthy?("1"), do: true
+  defp truthy?(_), do: false
+
+  # Inline sync: render + write + reload using node settings and non-expired credentials
+  defp inline_sync_and_reload(node_id) do
+    with %Node{} = node <- Repo.get(Node, node_id),
+         now <- DateTime.utc_now(),
+         uuids <- Repo.all(from c in Credential, where: c.node_id == ^node_id and is_nil(c.revoked_at) and (is_nil(c.expires_at) or c.expires_at > ^now), select: c.uuid),
+         params <- %{
+           "dest" => node.reality_dest || "www.cloudflare.com:443",
+           "serverNames" => node.reality_server_names || [],
+           "privateKey" => node.reality_private_key || "",
+           "publicKey" => node.reality_public_key || "",
+           "shortIds" => node.reality_short_ids || [],
+           "listen_port" => node.listen_port || 443
+         },
+         {:ok, cfg} <- Renderer.render(params, uuids),
+         :ok <- Renderer.write!(cfg, "/xray/config.json") do
+      case Renderer.reload() do
+        :ok -> :ok
+        {:error, e} -> {:error, e}
+      end
+    else
+      _ -> {:error, :sync_failed}
+    end
+  end
 
   # Sends a JSON response and logs the event as info.
   defp send_json(conn, status, data, event), do: (Log.info(event, "Router", %{details: data}); conn |> put_resp_content_type("application/json") |> send_resp(status, Jason.encode!(data)))

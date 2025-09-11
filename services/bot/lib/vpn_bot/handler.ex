@@ -60,17 +60,17 @@ defmodule VpnBot.Handler do
       ttl_hours: ttl_hours
     }
 
-    with {:ok, {link, node_id}} <- issue_link(api_base, payload),
-         :ok <- maybe_sync_and_reload(api_base, node_id) do
+    with {:ok, {link, node_id, synced}} <- issue_link(api_base, Map.put(payload, :sync, true)),
+         :ok <- maybe_sync_and_reload_unless_synced(api_base, node_id, synced) do
       ExGram.send_message(msg.chat.id, "Твой конфиг:\n" <> link)
       Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: msg.from.id, details: %{node_id: node_id}}))
     else
       {:error, :user_not_found} ->
         # Авто-создание пользователя и повторная попытка
         _ = Req.post(api_base <> "/v1/users", json: %{tg_id: msg.from.id, status: "active"})
-        case issue_link(api_base, payload) do
-          {:ok, {link, node_id}} ->
-            _ = maybe_sync_and_reload(api_base, node_id)
+        case issue_link(api_base, Map.put(payload, :sync, true)) do
+          {:ok, {link, node_id, synced}} ->
+            _ = maybe_sync_and_reload_unless_synced(api_base, node_id, synced)
             ExGram.send_message(msg.chat.id, "Твой конфиг:\n" <> link)
             Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: msg.from.id, details: %{node_id: node_id}}))
           {:error, reason} ->
@@ -96,12 +96,12 @@ defmodule VpnBot.Handler do
   end
 
   # Делает REST‑запрос к API `/v1/issue` и возвращает ссылку VLESS.
-  # Возвращает `{:ok, link}` или `{:error, reason}`.
+  # Возвращает `{:ok, {link, node_id, synced}}` или `{:error, reason}`.
   defp issue_link(api_base, payload) do
     case Req.post(api_base <> "/v1/issue", json: payload) do
-      # Новый формат: {"vless": link, "node_id": id}
+      # Новый формат: {"vless": link, "node_id": id, "synced": bool}
       {:ok, %Req.Response{status: 200, body: %{"vless" => link} = body}} ->
-        {:ok, {link, Map.get(body, "node_id")}}
+        {:ok, {link, Map.get(body, "node_id"), Map.get(body, "synced")}}
       # Пользователь не найден
       {:ok, %Req.Response{status: 404, body: %{"event" => "user_not_found"}}} -> {:error, :user_not_found}
       {:ok, %Req.Response{} = resp} -> {:error, {:bad_status, resp.status}}
@@ -109,17 +109,18 @@ defmodule VpnBot.Handler do
     end
   end
 
-  # При наличии node_id — триггерим синхронизацию Xray и горячую перезагрузку.
-  # Возвращает :ok даже если node_id отсутствует (для обратной совместимости).
-  defp maybe_sync_and_reload(_api_base, nil), do: :ok
-  defp maybe_sync_and_reload(api_base, node_id) when is_integer(node_id) do
+  # Если API уже выполнил sync (synced=true), пропускаем локальный sync.
+  # Иначе триггерим синхронизацию Xray и горячую перезагрузку.
+  defp maybe_sync_and_reload_unless_synced(_api_base, _node_id, true), do: :ok
+  defp maybe_sync_and_reload_unless_synced(_api_base, nil, _), do: :ok
+  defp maybe_sync_and_reload_unless_synced(api_base, node_id, _) when is_integer(node_id) do
     _ = Req.post(api_base <> "/v1/nodes/" <> Integer.to_string(node_id) <> "/sync", json: %{})
     case Req.post(api_base <> "/v1/nodes/" <> Integer.to_string(node_id) <> "/reload", json: %{}) do
       {:ok, %Req.Response{status: 200}} -> :ok
       _ -> :ok
     end
   end
-  defp maybe_sync_and_reload(_api_base, _), do: :ok
+  defp maybe_sync_and_reload_unless_synced(_api_base, _, _), do: :ok
 
   # Безопасно приводит строку/число к integer, иначе возвращает `default`.
   defp to_int(nil, default), do: default

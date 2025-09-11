@@ -35,6 +35,17 @@ The API stores credential expiry and `xray` sync includes only non‑expired cre
 */15 * * * * cd /opt/vpn && USE_LOCALHOST=1 NODE_ID=1 bash scripts/api_sync.sh >/dev/null 2>&1
 ```
 
+Or use systemd timer instead of cron:
+
+```
+sudo cp deploy/systemd/vpn-sync.service /etc/systemd/system/
+sudo cp deploy/systemd/vpn-sync.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now vpn-sync.timer
+```
+
+Inline sync from API: you can ask the API to sync+reload right after issuing a link by passing `sync=true` to `POST /v1/issue`. The bot uses this mode by default.
+
 ## Make targets
 
 Convenience targets for local/dev:

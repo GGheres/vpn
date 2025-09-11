@@ -1,0 +1,16 @@
+[Unit]
+Description=VPN Xray Sync (render config from API DB and hot-reload)
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/vpn
+Environment="USE_LOCALHOST=1" "NODE_ID=1"
+ExecStart=/usr/bin/bash -lc './scripts/api_sync.sh && ./scripts/xray_reload.sh'
+Nice=10
+IOSchedulingClass=best-effort
+
+[Install]
+WantedBy=multi-user.target
+

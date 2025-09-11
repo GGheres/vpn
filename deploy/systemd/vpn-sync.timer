@@ -1,0 +1,11 @@
+[Unit]
+Description=Run VPN Xray Sync periodically
+
+[Timer]
+OnCalendar=*:0/15
+AccuracySec=1m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
