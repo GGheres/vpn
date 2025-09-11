@@ -56,7 +56,7 @@ defmodule VpnApi.Router do
          _ <- (if single_active, do: revoke_credentials(user.id, node.id, revoke_scope), else: :ok),
          {:ok, cred} <- ensure_credential(user.id, node.id, ttl_hours, force_new),
          {:ok, link} <- Vless.render(cred.uuid, %{
-           host: Map.get(p, "host", "localhost"),
+           host: Map.get(p, "host", System.get_env("VLESS_HOST") || (case node.ip do s when is_binary(s) and s != "" -> s; _ -> "localhost" end)),
            port: Map.get(p, "port", 443),
            public_key: Map.get(p, "public_key", ""),
            short_id: Map.get(p, "short_id", ""),
@@ -168,8 +168,9 @@ defmodule VpnApi.Router do
 
   # PATCH /v1/nodes/:id — update node
   patch "/v1/nodes/:id" do
+    attrs = sanitize_node_attrs(conn.body_params)
     with %Node{} = node <- Repo.get(Node, String.to_integer(id)) || throw(:not_found),
-         changeset <- Node.changeset(node, conn.body_params),
+         changeset <- Node.changeset(node, attrs),
          {:ok, node2} <- Repo.update(changeset) do
       send_json(conn, 200, node2, "node_updated")
     else
@@ -328,6 +329,71 @@ defmodule VpnApi.Router do
     Repo.update_all(q, set: [revoked_at: now])
     :ok
   end
+
+  # Sanitize incoming node attributes: drop placeholders like "<XRAY_PUBLIC_KEY>"
+  # and empty strings for key fields; filter placeholder entries from arrays.
+  defp sanitize_node_attrs(attrs) when is_map(attrs) do
+    placeholders = MapSet.new(["<XRAY_PUBLIC_KEY>", "<XRAY_REALITY_SERVER_NAME>", "<XRAY_SHORT_ID>", "<ВАШ_PUBLIC_IP>"])
+
+    clean_bin = fn val ->
+      case val do
+        v when is_binary(v) and (v == "" or MapSet.member?(placeholders, v)) -> :drop
+        v when is_binary(v) -> v
+        _ -> :drop
+      end
+    end
+
+    clean_list = fn arr ->
+      case arr do
+        list when is_list(list) ->
+          list
+          |> Enum.filter(fn s -> is_binary(s) and s != "" and not MapSet.member?(placeholders, s) end)
+        _ -> []
+      end
+    end
+
+    base = %{}
+    base =
+      case clean_bin.(Map.get(attrs, "reality_public_key")) do
+        :drop -> base
+        v -> Map.put(base, "reality_public_key", v)
+      end
+    base =
+      case clean_bin.(Map.get(attrs, "reality_private_key")) do
+        :drop -> base
+        v -> Map.put(base, "reality_private_key", v)
+      end
+    base =
+      case clean_bin.(Map.get(attrs, "ip")) do
+        :drop -> base
+        v -> Map.put(base, "ip", v)
+      end
+    base =
+      case clean_bin.(Map.get(attrs, "reality_dest")) do
+        :drop -> base
+        v -> Map.put(base, "reality_dest", v)
+      end
+    base =
+      case Map.get(attrs, "reality_server_names") do
+        nil -> base
+        v -> Map.put(base, "reality_server_names", clean_list.(v))
+      end
+    base =
+      case Map.get(attrs, "reality_short_ids") do
+        nil -> base
+        v -> Map.put(base, "reality_short_ids", clean_list.(v))
+      end
+    # pass through other attrs like region/status/version/listen_port if provided
+    base
+    |> then(fn m ->
+      m = if Map.has_key?(attrs, "region"), do: Map.put(m, "region", Map.get(attrs, "region")), else: m
+      m = if Map.has_key?(attrs, "status"), do: Map.put(m, "status", Map.get(attrs, "status")), else: m
+      m = if Map.has_key?(attrs, "version"), do: Map.put(m, "version", Map.get(attrs, "version")), else: m
+      m = if Map.has_key?(attrs, "listen_port"), do: Map.put(m, "listen_port", Map.get(attrs, "listen_port")), else: m
+      m
+    end)
+  end
+  defp sanitize_node_attrs(other), do: %{}
 
   # Sends a JSON response and logs the event as info.
   defp send_json(conn, status, data, event), do: (Log.info(event, "Router", %{details: data}); conn |> put_resp_content_type("application/json") |> send_resp(status, Jason.encode!(data)))

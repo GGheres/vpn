@@ -48,7 +48,9 @@ defmodule VpnBot.Handler do
     short_id = System.get_env("XRAY_SHORT_ID", "")
     server_name = System.get_env("XRAY_REALITY_SERVER_NAME", "")
 
-    single_active = true
+    single_active = truthy?(System.get_env("BOT_SINGLE_ACTIVE") || "0")
+    revoke_scope = System.get_env("BOT_REVOKE_SCOPE") || "user_node"
+    force_new = truthy?(System.get_env("BOT_FORCE_NEW") || "0")
     payload = %{
       tg_id: msg.from.id,
       host: host,
@@ -59,9 +61,9 @@ defmodule VpnBot.Handler do
       label: "vpn-" <> plan,
       plan: plan,
       ttl_hours: ttl_hours,
-      force_new: true,
+      force_new: force_new,
       single_active: single_active,
-      revoke_scope: "user",
+      revoke_scope: revoke_scope,
       sync: true
     }
 
@@ -136,4 +138,12 @@ defmodule VpnBot.Handler do
       :error -> default
     end
   end
+
+  # Common truthy parsing for env flags
+  defp truthy?("1"), do: true
+  defp truthy?("true"), do: true
+  defp truthy?("TRUE"), do: true
+  defp truthy?(true), do: true
+  defp truthy?(1), do: true
+  defp truthy?(_), do: false
 end

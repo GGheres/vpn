@@ -10,6 +10,7 @@ services:
       - APP_SECRET=${APP_SECRET:-please_change_me}
       - APP_PORT=${APP_PORT:-4000}
       - APP_HOST=${APP_HOST:-0.0.0.0}
+      - VLESS_HOST=${VLESS_HOST:-localhost}
       - XRAY_LOG_LEVEL=${XRAY_LOG_LEVEL:-error}
       - XRAY_ENABLE_STATS=${XRAY_ENABLE_STATS:-0}
       - POSTGRES_USER=${POSTGRES_USER:-vpn}
