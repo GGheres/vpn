@@ -46,6 +46,33 @@ sudo systemctl enable --now vpn-sync.timer
 
 Inline sync from API: you can ask the API to sync+reload right after issuing a link by passing `sync=true` to `POST /v1/issue`. The bot uses this mode by default.
 
+### Per‑User Stats (optional)
+
+Enable per‑user traffic counters and the built‑in Xray admin API:
+
+- Set in `.env`: `XRAY_ENABLE_STATS=1` (and optionally `XRAY_LOG_LEVEL=info` while observing)
+- Apply: `docker compose -f docker-compose.prod.yml --profile prod up -d --build api`
+- Sync + reload (to rewrite config with stats enabled):
+  - `USE_LOCALHOST=1 XRAY_ENABLE_STATS=1 make xray-sync && make xray-reload`
+
+Query counters via the Xray CLI inside the container (examples):
+
+```
+# Total for a specific user (replace labels)
+docker exec xray xray api stats --server=127.0.0.1:10085 \
+  -name 'user>>>u:12|tg:653848276>>>traffic>>>downlink' -reset=false
+
+docker exec xray xray api stats --server=127.0.0.1:10085 \
+  -name 'user>>>u:12|tg:653848276>>>traffic>>>uplink' -reset=false
+
+# List all user counters (pattern support depends on xray build)
+docker exec xray xray api stats --server=127.0.0.1:10085 -name 'user>>>' -reset=false || true
+```
+
+Notes:
+- Users are labeled in config as `email: "u:<user_id>|tg:<tg_id>"` and appear in logs and stats.
+- Keep `XRAY_LOG_LEVEL=error` for low‑noise operations; switch to `info` temporarily to see accepted destinations.
+
 ## Make targets
 
 Convenience targets for local/dev:

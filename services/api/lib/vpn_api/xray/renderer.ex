@@ -30,32 +30,80 @@ defmodule VpnApi.Xray.Renderer do
           _ ->
             Enum.map(list, &%{"id" => &1, "flow" => "xtls-rprx-vision"})
         end
-      config = %{
-        "log" => %{"loglevel" => loglevel},
-        "inbounds" => [
-          %{
-            "tag" => "vless-in",
-            "listen" => "0.0.0.0",
-            "port" => Map.get(params, "listen_port", 443),
-            "protocol" => "vless",
-            "settings" => %{"clients" => clients, "decryption" => "none"},
-            "streamSettings" => %{
-              "network" => "tcp",
-              "security" => "reality",
-              "realitySettings" => %{
-                "dest" => Map.get(params, "dest", "www.cloudflare.com:443"),
-                "serverNames" => Map.get(params, "serverNames", ["www.cloudflare.com"]),
-                "privateKey" => Map.get(params, "privateKey", ""),
-                "publicKey" => Map.get(params, "publicKey", ""),
-                "shortIds" => Map.get(params, "shortIds", ["0123456789abcdef"]),
-                "xver" => 0,
-                "show" => false
+      base_inbounds = [
+        %{
+          "tag" => "vless-in",
+          "listen" => "0.0.0.0",
+          "port" => Map.get(params, "listen_port", 443),
+          "protocol" => "vless",
+          "settings" => %{"clients" => clients, "decryption" => "none"},
+          "streamSettings" => %{
+            "network" => "tcp",
+            "security" => "reality",
+            "realitySettings" => %{
+              "dest" => Map.get(params, "dest", "www.cloudflare.com:443"),
+              "serverNames" => Map.get(params, "serverNames", ["www.cloudflare.com"]),
+              "privateKey" => Map.get(params, "privateKey", ""),
+              "publicKey" => Map.get(params, "publicKey", ""),
+              "shortIds" => Map.get(params, "shortIds", ["0123456789abcdef"]),
+              "xver" => 0,
+              "show" => false
+            }
+          }
+        }
+      ]
+
+      enable_stats = case Map.get(params, "enable_stats", false) do
+        true -> true
+        "true" -> true
+        1 -> true
+        "1" -> true
+        _ -> false
+      end
+
+      {inbounds2, extra} =
+        if enable_stats do
+          api_in = %{
+            "tag" => "api",
+            "listen" => "127.0.0.1",
+            "port" => 10085,
+            "protocol" => "dokodemo-door",
+            "settings" => %{"address" => "127.0.0.1"}
+          }
+          routing = %{
+            "routing" => %{
+              "rules" => [
+                %{"type" => "field", "inboundTag" => ["api"], "outboundTag" => "api"}
+              ]
+            }
+          }
+          policy = %{
+            "policy" => %{
+              "levels" => %{"0" => %{"statsUserUplink" => true, "statsUserDownlink" => true}},
+              "system" => %{
+                "statsInboundUplink" => true,
+                "statsInboundDownlink" => true,
+                "statsOutboundUplink" => true,
+                "statsOutboundDownlink" => true
               }
             }
           }
-        ],
-        "outbounds" => [%{"protocol" => "freedom", "tag" => "direct"}]
-      }
+          extras =
+            routing
+            |> Map.merge(policy)
+            |> Map.merge(%{"api" => %{"tag" => "api", "services" => ["StatsService"]}, "stats" => %{}})
+          {base_inbounds ++ [api_in], extras}
+        else
+          {base_inbounds, %{}}
+        end
+
+      config =
+        %{
+          "log" => %{"loglevel" => loglevel},
+          "inbounds" => inbounds2,
+          "outbounds" => [%{"protocol" => "freedom", "tag" => "direct"}]
+        }
+        |> Map.merge(extra)
       {:ok, config}
     rescue
       e -> {:error, %{error_code: "VPN-003", reason: {:render_failed, inspect(e)}}}

@@ -283,6 +283,8 @@ defmodule VpnApi.Router do
                        select: {c.uuid, u.id, u.tg_id}
                    ) |> Enum.map(fn {uuid, uid, tg} -> %{"id" => uuid, "email" => format_email(uid, tg)} end),
          lvl <- System.get_env("XRAY_LOG_LEVEL") || "error",
+         stats_env <- System.get_env("XRAY_ENABLE_STATS"),
+         enable_stats <- (stats_env in ["1", "true", "TRUE", "True"]),
          params <- %{
            "dest" => node.reality_dest || "www.cloudflare.com:443",
            "serverNames" => node.reality_server_names || [],
@@ -290,7 +292,8 @@ defmodule VpnApi.Router do
            "publicKey" => node.reality_public_key || "",
            "shortIds" => node.reality_short_ids || [],
            "listen_port" => node.listen_port || 443,
-           "loglevel" => lvl
+            "loglevel" => lvl,
+            "enable_stats" => enable_stats
          },
          {:ok, cfg} <- Renderer.render(params, clients),
          :ok <- Renderer.write!(cfg, "/xray/config.json") do
