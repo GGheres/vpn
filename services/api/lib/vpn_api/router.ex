@@ -210,22 +210,32 @@ defmodule VpnApi.Router do
         _ -> nil
       end
 
-    case Repo.one(from c in Credential, where: c.user_id == ^user_id and c.node_id == ^node_id) do
+    now = DateTime.utc_now()
+    # Pick the most recent ACTIVE credential (not revoked and not expired) to reuse/extend.
+    q = from c in Credential,
+          where:
+            c.user_id == ^user_id and c.node_id == ^node_id and is_nil(c.revoked_at) and (
+              is_nil(c.expires_at) or c.expires_at > ^now
+            ),
+          order_by: [desc: c.inserted_at],
+          limit: 1
+
+    case Repo.one(q) do
       %Credential{} = c ->
         if force_new do
           attrs = %{user_id: user_id, node_id: node_id, uuid: Ecto.UUID.generate()}
           attrs = if expires_at, do: Map.put(attrs, :expires_at, expires_at), else: attrs
           %Credential{} |> Credential.changeset(attrs) |> Repo.insert()
         else
-        new_exp =
-          cond do
-            is_nil(expires_at) -> nil
-            is_nil(c.expires_at) -> expires_at
-            DateTime.compare(expires_at, c.expires_at) == :gt -> expires_at
-            true -> nil
-          end
-        changes = if new_exp, do: %{expires_at: new_exp}, else: %{}
-        if map_size(changes) == 0, do: {:ok, c}, else: Repo.update(Credential.changeset(c, changes))
+          new_exp =
+            cond do
+              is_nil(expires_at) -> nil
+              is_nil(c.expires_at) -> expires_at
+              DateTime.compare(expires_at, c.expires_at) == :gt -> expires_at
+              true -> nil
+            end
+          changes = if new_exp, do: %{expires_at: new_exp}, else: %{}
+          if map_size(changes) == 0, do: {:ok, c}, else: Repo.update(Credential.changeset(c, changes))
         end
       nil ->
         attrs = %{user_id: user_id, node_id: node_id, uuid: Ecto.UUID.generate()}
