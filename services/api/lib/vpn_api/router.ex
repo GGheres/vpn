@@ -53,7 +53,7 @@ defmodule VpnApi.Router do
     with tg_id when is_integer(tg_id) <- Map.get(p, "tg_id"),
          %User{} = user <- Repo.one(from u in User, where: u.tg_id == ^tg_id, order_by: [asc: u.id], limit: 1) || {:error, :not_found_user},
          %Node{} = node <- pick_node(Map.get(p, "node_id")) || {:error, :not_found_node},
-         _ <- if single_active, do: revoke_credentials(user.id, node.id, revoke_scope), else: :ok,
+         _ <- (if single_active, do: revoke_credentials(user.id, node.id, revoke_scope), else: :ok),
          {:ok, cred} <- ensure_credential(user.id, node.id, ttl_hours, force_new),
          {:ok, link} <- Vless.render(cred.uuid, %{
            host: Map.get(p, "host", "localhost"),
