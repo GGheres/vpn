@@ -1,0 +1,7 @@
+.env
+.env.bak*
+_build/
+deps/
+*.beam
+priv/plts/
+erl_crash.dump

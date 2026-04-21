@@ -81,11 +81,13 @@ defmodule VpnBot.Handler do
             ExGram.send_message(msg.chat.id, "Твой конфиг:\n" <> link)
             Logger.info(Jason.encode!(%{ts: DateTime.utc_now(), level: "info", event: "bot_config_issued", module: "VpnBot.Handler", user_id: msg.from.id, details: %{node_id: node_id}}))
           {:error, reason} ->
-            ExGram.send_message(msg.chat.id, "Ошибка выдачи конфига: #{inspect(reason)}")
+            Logger.error(Jason.encode!(%{ts: DateTime.utc_now(), level: "error", event: "bot_config_error", module: "VpnBot.Handler", user_id: msg.from.id, details: inspect(reason)}))
+            ExGram.send_message(msg.chat.id, "Произошла ошибка, попробуй позже")
           _ -> :ok
         end
       {:error, reason} ->
-        ExGram.send_message(msg.chat.id, "Ошибка выдачи конфига: #{inspect(reason)}")
+        Logger.error(Jason.encode!(%{ts: DateTime.utc_now(), level: "error", event: "bot_config_error", module: "VpnBot.Handler", user_id: msg.from.id, details: inspect(reason)}))
+        ExGram.send_message(msg.chat.id, "Произошла ошибка, попробуй позже")
     end
   end
 
