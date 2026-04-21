@@ -28,12 +28,24 @@ defmodule VpnApi.Vless do
     sid  = Map.get(opts, :short_id, "")
     sni  = Map.get(opts, :server_name, "")
     lbl  = URI.encode_www_form(Map.get(opts, :label, "vpn"))
-    link =
-      "vless://#{uuid}@#{host}:#{port}?encryption=none&security=reality&fp=chrome&flow=xtls-rprx-vision" <>
-      (if pk  != "", do: "&pbk=#{pk}", else: "") <>
-      (if sid != "", do: "&sid=#{sid}", else: "") <>
-      (if sni != "", do: "&sni=#{sni}", else: "") <>
-      "&type=tcp##{lbl}"
-    {:ok, link}
+
+    with :ok <- validate_port(port) do
+      link =
+        "vless://#{uuid}@#{host}:#{port}?encryption=none&security=reality&fp=chrome&flow=xtls-rprx-vision" <>
+        (if pk  != "", do: "&pbk=#{URI.encode_www_form(pk)}", else: "") <>
+        (if sid != "", do: "&sid=#{URI.encode_www_form(sid)}", else: "") <>
+        (if sni != "", do: "&sni=#{URI.encode_www_form(sni)}", else: "") <>
+        "&type=tcp##{lbl}"
+      {:ok, link}
+    end
   end
+
+  defp validate_port(port) when is_integer(port) and port >= 1 and port <= 65535, do: :ok
+  defp validate_port(port) when is_binary(port) do
+    case Integer.parse(port) do
+      {n, ""} when n >= 1 and n <= 65535 -> :ok
+      _ -> {:error, %{error_code: "VPN-003", reason: :invalid_port}}
+    end
+  end
+  defp validate_port(_), do: {:error, %{error_code: "VPN-003", reason: :invalid_port}}
 end

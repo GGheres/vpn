@@ -27,10 +27,16 @@ defmodule VpnApi.Router do
   plug Plug.Parsers, parsers: [:json], json_decoder: Jason
   plug :dispatch
 
-  # GET /health — simple readiness probe
+  # GET /health — readiness probe with DB check
   get "/health" do
-    Log.info("health_ok", "Router", %{})
-    send_json(conn, 200, %{ok: true}, "health_ok")
+    case Repo.query("SELECT 1") do
+      {:ok, _} ->
+        Log.info("health_ok", "Router", %{})
+        send_json(conn, 200, %{ok: true, db: true}, "health_ok")
+      {:error, _} ->
+        Log.error("DB-001", "health_db_failed", "Router", %{})
+        send_json(conn, 503, %{ok: false, db: false}, "health_db_failed")
+    end
   end
 
   # POST /v1/users — create a user from JSON body: %{tg_id: integer, status?: string}
@@ -38,7 +44,7 @@ defmodule VpnApi.Router do
     params = conn.body_params
     case User.changeset(%User{}, params) |> Repo.insert() do
       {:ok, user} -> (Log.info("user_created", "Router", %{user_id: user.id}); send_json(conn, 201, user, "user_created"))
-      {:error, err} -> send_error(conn, 422, "DB-001", "user_create_failed", %{reason: inspect(err)})
+      {:error, err} -> send_error(conn, 422, "DB-001", "user_create_failed", %{}, inspect(err))
     end
   end
 
@@ -83,8 +89,8 @@ defmodule VpnApi.Router do
     else
       {:error, :not_found_user} -> send_error(conn, 404, "API-001", "user_not_found", %{})
       {:error, :not_found_node} -> send_error(conn, 404, "API-001", "node_not_found", %{})
-      {:error, %{error_code: code} = e} -> send_error(conn, 500, code, "vless_issue_failed", e)
-      {:error, reason} -> send_error(conn, 500, "VPN-003", "vless_issue_failed", %{reason: inspect(reason)})
+      {:error, %{error_code: code} = e} -> send_error(conn, 500, code, "vless_issue_failed", %{}, inspect(e))
+      {:error, reason} -> send_error(conn, 500, "VPN-003", "vless_issue_failed", %{}, inspect(reason))
       _ -> send_error(conn, 400, "API-001", "bad_request", %{})
     end
   end
@@ -106,7 +112,7 @@ defmodule VpnApi.Router do
               ),
             select: {c.uuid, u.id, u.tg_id}
         )
-        |> Enum.map(fn {uuid, uid, tg} -> %{"id" => uuid, "email" => format_email(uid, tg)} end)
+        |> Enum.map(fn {uuid, uid, tg} -> %{"id" => uuid, "email" => format_email(uid, tg, uuid)} end)
 
       params =
         %{
@@ -124,9 +130,9 @@ defmodule VpnApi.Router do
           case Renderer.write!(cfg, "/xray/config.json") do
             :ok -> Log.info("xray_config_written", "Router", %{details: %{node_id: id, clients: length(clients)}})
                    send_json(conn, 202, %{"written" => true, "clients" => length(clients)}, "xray_config_written")
-            {:error, e} -> send_error(conn, 500, "VPN-003", "xray_config_write_failed", %{reason: inspect(e)})
+            {:error, e} -> send_error(conn, 500, "VPN-003", "xray_config_write_failed", %{}, inspect(e))
           end
-        {:error, e} -> send_error(conn, 500, "VPN-003", "xray_config_render_failed", e)
+        {:error, e} -> send_error(conn, 500, "VPN-003", "xray_config_render_failed", %{}, inspect(e))
       end
     else
       :not_found_node -> send_error(conn, 404, "API-001", "node_not_found", %{})
@@ -138,7 +144,7 @@ defmodule VpnApi.Router do
   post "/v1/nodes/:id/reload" do
     case VpnApi.Xray.Renderer.reload() do
       :ok -> send_json(conn, 200, %{reloaded: true, node_id: id}, "xray_reload_ok")
-      {:error, e} -> send_error(conn, 500, "VPN-002", "xray_reload_failed", e)
+      {:error, e} -> send_error(conn, 500, "VPN-002", "xray_reload_failed", %{}, inspect(e))
     end
   end
 
@@ -154,7 +160,7 @@ defmodule VpnApi.Router do
     params = sanitize_node_attrs(conn.body_params)
     case Node.changeset(%Node{}, params) |> Repo.insert() do
       {:ok, node} -> send_json(conn, 201, node, "node_created")
-      {:error, err} -> send_error(conn, 422, "DB-001", "node_create_failed", %{reason: inspect(err)})
+      {:error, err} -> send_error(conn, 422, "DB-001", "node_create_failed", %{}, inspect(err))
     end
   end
 
@@ -175,7 +181,7 @@ defmodule VpnApi.Router do
       send_json(conn, 200, node2, "node_updated")
     else
       :not_found -> send_error(conn, 404, "API-001", "node_not_found", %{})
-      {:error, err} -> send_error(conn, 422, "DB-001", "node_update_failed", %{reason: inspect(err)})
+      {:error, err} -> send_error(conn, 422, "DB-001", "node_update_failed", %{}, inspect(err))
     end
   end
 
@@ -185,7 +191,7 @@ defmodule VpnApi.Router do
       %Node{} = node ->
         case Repo.delete(node) do
           {:ok, _} -> (Log.info("node_deleted", "Router", %{details: %{id: node.id}}); send_resp(conn, 204, ""))
-          {:error, err} -> send_error(conn, 422, "DB-001", "node_delete_failed", %{reason: inspect(err)})
+          {:error, err} -> send_error(conn, 422, "DB-001", "node_delete_failed", %{}, inspect(err))
         end
       nil -> send_error(conn, 404, "API-001", "node_not_found", %{})
     end
@@ -244,16 +250,19 @@ defmodule VpnApi.Router do
         %Credential{} |> Credential.changeset(attrs) |> Repo.insert()
     end
   rescue
-    e -> {:error, %{error_code: "DB-001", reason: inspect(e)}}
+    e ->
+      Log.error("DB-001", "credential_db_error", "Router", %{details: inspect(e)})
+      {:error, %{error_code: "DB-001"}}
   end
 
   # Formats an Xray client email label to identify the user in logs.
-  defp format_email(user_id, tg_id) do
+  defp format_email(user_id, tg_id, uuid) do
     tg = case tg_id do
-      nil -> ""
-      v -> "|tg:" <> to_string(v)
+      nil -> "none"
+      v -> to_string(v)
     end
-    "u:" <> to_string(user_id) <> tg
+    short = uuid |> to_string() |> String.slice(0, 8)
+    "u#{user_id}-tg#{tg}-#{short}@vpn.local"
   end
 
   # Picks TTL (in hours) from request params. Supports "ttl_hours" or high-level plans.
@@ -292,7 +301,7 @@ defmodule VpnApi.Router do
                        join: u in User, on: u.id == c.user_id,
                        where: c.node_id == ^node_id and is_nil(c.revoked_at) and (is_nil(c.expires_at) or c.expires_at > ^now),
                        select: {c.uuid, u.id, u.tg_id}
-                   ) |> Enum.map(fn {uuid, uid, tg} -> %{"id" => uuid, "email" => format_email(uid, tg)} end),
+                   ) |> Enum.map(fn {uuid, uid, tg} -> %{"id" => uuid, "email" => format_email(uid, tg, uuid)} end),
          lvl <- System.get_env("XRAY_LOG_LEVEL") || "error",
          stats_env <- System.get_env("XRAY_ENABLE_STATS"),
          enable_stats <- (stats_env in ["1", "true", "TRUE", "True"]),
@@ -399,6 +408,11 @@ defmodule VpnApi.Router do
   # Sends a JSON response and logs the event as info.
   defp send_json(conn, status, data, event), do: (Log.info(event, "Router", %{details: data}); conn |> put_resp_content_type("application/json") |> send_resp(status, Jason.encode!(data)))
 
-  # Sends a standardized JSON error response and logs the event as error.
-  defp send_error(conn, status, code, event, details), do: (Log.error(code, event, "Router", %{details: details}); conn |> put_resp_content_type("application/json") |> send_resp(status, Jason.encode!(%{error: true, error_code: code, event: event, details: details})))
+  # Sends a standardized JSON error response. Logs internal details server-side only.
+  defp send_error(conn, status, code, event, _client_details \\ %{}, log_details \\ nil) do
+    Log.error(code, event, "Router", %{details: log_details || %{}})
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(status, Jason.encode!(%{error: true, error_code: code, event: event}))
+  end
 end
