@@ -258,11 +258,11 @@ defmodule VpnApi.Router do
   # Formats an Xray client email label to identify the user in logs.
   defp format_email(user_id, tg_id, uuid) do
     tg = case tg_id do
-      nil -> ""
-      v -> "|tg:" <> to_string(v)
+      nil -> "none"
+      v -> to_string(v)
     end
     short = uuid |> to_string() |> String.slice(0, 8)
-    "u:" <> to_string(user_id) <> tg <> "|" <> short
+    "u#{user_id}-tg#{tg}-#{short}@vpn.local"
   end
 
   # Picks TTL (in hours) from request params. Supports "ttl_hours" or high-level plans.
