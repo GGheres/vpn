@@ -112,7 +112,7 @@ defmodule VpnApi.Router do
               ),
             select: {c.uuid, u.id, u.tg_id}
         )
-        |> Enum.map(fn {uuid, uid, tg} -> %{"id" => uuid, "email" => format_email(uid, tg)} end)
+        |> Enum.map(fn {uuid, uid, tg} -> %{"id" => uuid, "email" => format_email(uid, tg, uuid)} end)
 
       params =
         %{
@@ -256,12 +256,13 @@ defmodule VpnApi.Router do
   end
 
   # Formats an Xray client email label to identify the user in logs.
-  defp format_email(user_id, tg_id) do
+  defp format_email(user_id, tg_id, uuid) do
     tg = case tg_id do
       nil -> ""
       v -> "|tg:" <> to_string(v)
     end
-    "u:" <> to_string(user_id) <> tg
+    short = uuid |> to_string() |> String.slice(0, 8)
+    "u:" <> to_string(user_id) <> tg <> "|" <> short
   end
 
   # Picks TTL (in hours) from request params. Supports "ttl_hours" or high-level plans.
@@ -300,7 +301,7 @@ defmodule VpnApi.Router do
                        join: u in User, on: u.id == c.user_id,
                        where: c.node_id == ^node_id and is_nil(c.revoked_at) and (is_nil(c.expires_at) or c.expires_at > ^now),
                        select: {c.uuid, u.id, u.tg_id}
-                   ) |> Enum.map(fn {uuid, uid, tg} -> %{"id" => uuid, "email" => format_email(uid, tg)} end),
+                   ) |> Enum.map(fn {uuid, uid, tg} -> %{"id" => uuid, "email" => format_email(uid, tg, uuid)} end),
          lvl <- System.get_env("XRAY_LOG_LEVEL") || "error",
          stats_env <- System.get_env("XRAY_ENABLE_STATS"),
          enable_stats <- (stats_env in ["1", "true", "TRUE", "True"]),
